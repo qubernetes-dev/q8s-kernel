@@ -332,7 +332,7 @@ class Project:
 
         print(f"WORKDIR {WORKSPACE}", file=f)
         print("COPY requirements.txt .", file=f)
-        print("RUN pip install -r requirements.txt", file=f)
+        print("RUN pip install --no-cache -r requirements.txt", file=f)
 
     def __get_target(self, target: str) -> Q8STarget:
         if hasattr(self.configuration.targets, target) is False:
