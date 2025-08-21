@@ -9,6 +9,7 @@ from typing import List, Optional
 from rich.progress import Progress
 import yaml
 from dacite import from_dict
+import sys
 
 from q8s.constants import BASE_IMAGES, WORKSPACE
 
@@ -182,28 +183,38 @@ class Project:
             stderr=STDOUT,
             bufsize=1,
             universal_newlines=True,
+            encoding="utf-8",   # ✅ force UTF-8 decoding
+            errors="replace",   # ✅ avoid crashing on bad bytes
         )
 
-        def handle_output(stream, mask):
-            # Because the process' output is line buffered, there's only ever one
-            # line to read when this function is called
-            line = stream.readline()
-            if not silent:
-                progress.console.print(line, end="")
+       if sys.platform == "win32":
+            # Windows-safe: read line by line instead of using selectors
+            for line in iter(build_process.stdout.readline, ''):
+                if not silent:
+                    progress.console.print(line, end="")
+            build_process.stdout.close()
+            build_process.wait()
+        else:
+            def handle_output(stream, mask):
+                # Because the process' output is line buffered, there's only ever one
+                # line to read when this function is called
+                line = stream.readline()
+                if not silent:
+                    progress.console.print(line, end="")
 
-        # Register callback for an "available for read" event from subprocess' stdout stream
-        selector = selectors.DefaultSelector()
-        selector.register(build_process.stdout, selectors.EVENT_READ, handle_output)
+            # Register callback for an "available for read" event from subprocess' stdout stream
+            selector = selectors.DefaultSelector()
+            selector.register(build_process.stdout, selectors.EVENT_READ, handle_output)
 
-        # Loop until subprocess is terminated
-        while build_process.poll() is None:
-            # Wait for events and handle them with their registered callbacks
-            events = selector.select()
-            for key, mask in events:
-                callback = key.data
-                callback(key.fileobj, mask)
+            # Loop until subprocess is terminated
+            while build_process.poll() is None:
+                # Wait for events and handle them with their registered callbacks
+                events = selector.select()
+                for key, mask in events:
+                    callback = key.data
+                    callback(key.fileobj, mask)
 
-        selector.close()
+            selector.close()
 
         if build_process.returncode != 0:
             progress.advance(task)
@@ -231,28 +242,37 @@ class Project:
             stderr=STDOUT,
             bufsize=1,
             universal_newlines=True,
+            encoding="utf-8",   # ✅ force UTF-8 decoding
+            errors="replace",   # ✅ avoid crashing on bad bytes
         )
 
-        def handle_output(stream, mask):
-            # Because the process' output is line buffered, there's only ever one
-            # line to read when this function is called
-            line = stream.readline()
-            if not silent:
-                progress.console.print(line, end="")
+        if sys.platform == "win32":
+            for line in iter(push_process.stdout.readline, ''):
+                if not silent:
+                    progress.console.print(line, end="")
+            push_process.stdout.close()
+            push_process.wait()
+        else:
+            def handle_output(stream, mask):
+                # Because the process' output is line buffered, there's only ever one
+                # line to read when this function is called
+                line = stream.readline()
+                if not silent:
+                    progress.console.print(line, end="")
 
-        # Register callback for an "available for read" event from subprocess' stdout stream
-        selector = selectors.DefaultSelector()
-        selector.register(push_process.stdout, selectors.EVENT_READ, handle_output)
+            # Register callback for an "available for read" event from subprocess' stdout stream
+            selector = selectors.DefaultSelector()
+            selector.register(push_process.stdout, selectors.EVENT_READ, handle_output)
 
-        # Loop until subprocess is terminated
-        while push_process.poll() is None:
-            # Wait for events and handle them with their registered callbacks
-            events = selector.select()
-            for key, mask in events:
-                callback = key.data
-                callback(key.fileobj, mask)
+            # Loop until subprocess is terminated
+            while push_process.poll() is None:
+                # Wait for events and handle them with their registered callbacks
+                events = selector.select()
+                for key, mask in events:
+                    callback = key.data
+                    callback(key.fileobj, mask)
 
-        selector.close()
+            selector.close()
 
         if push_process.returncode != 0:
             progress.advance(task)
