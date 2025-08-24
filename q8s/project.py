@@ -37,6 +37,36 @@ def rmdir(directory):
     directory.rmdir()
 
 
+def _read_stream_lines(stream, progress, silent, is_error: bool = False):
+    """
+    Helper to read from a stream line by line (testable without subprocess).
+    """
+    while True:
+        line = stream.readline()
+        if line == '':
+            break
+        if not silent:
+            if is_error:
+                progress.console.print(f"[red]{line}[/red]", end="")
+            else:
+                progress.console.print(line, end="")
+
+
+def _handle_subprocess_output(process, progress, silent):
+    """
+    Read subprocess stdout and stderr line by line (Windows-safe).
+    """
+    if process.stdout:
+        _read_stream_lines(process.stdout, progress, silent)
+        process.stdout.close()
+
+    if process.stderr:
+        _read_stream_lines(process.stderr, progress, silent, is_error=True)
+        process.stderr.close()
+
+    process.wait()
+
+
 @dataclass
 class Q8SPythonEnv:
     dependencies: List[str]
@@ -183,17 +213,13 @@ class Project:
             stderr=STDOUT,
             bufsize=1,
             universal_newlines=True,
-            encoding="utf-8",   # ✅ force UTF-8 decoding
-            errors="replace",   # ✅ avoid crashing on bad bytes
+            encoding="utf-8",   # force UTF-8 decoding
+            errors="replace",   # avoid crashing on bad bytes
         )
 
-       if sys.platform == "win32":
+        if sys.platform == "win32":
             # Windows-safe: read line by line instead of using selectors
-            for line in iter(build_process.stdout.readline, ''):
-                if not silent:
-                    progress.console.print(line, end="")
-            build_process.stdout.close()
-            build_process.wait()
+            _handle_subprocess_output(build_process, progress, silent)
         else:
             def handle_output(stream, mask):
                 # Because the process' output is line buffered, there's only ever one
@@ -242,16 +268,14 @@ class Project:
             stderr=STDOUT,
             bufsize=1,
             universal_newlines=True,
-            encoding="utf-8",   # ✅ force UTF-8 decoding
-            errors="replace",   # ✅ avoid crashing on bad bytes
+            encoding="utf-8",   # force UTF-8 decoding
+            errors="replace",   # avoid crashing on bad bytes
         )
 
         if sys.platform == "win32":
-            for line in iter(push_process.stdout.readline, ''):
-                if not silent:
-                    progress.console.print(line, end="")
-            push_process.stdout.close()
-            push_process.wait()
+            # Windows-safe: read line by line instead of using selectors
+            _handle_subprocess_output(push_process, progress, silent)
+
         else:
             def handle_output(stream, mask):
                 # Because the process' output is line buffered, there's only ever one
