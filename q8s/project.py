@@ -9,6 +9,7 @@ from typing import List, Optional
 from rich.progress import Progress
 import yaml
 from dacite import from_dict
+import sys
 
 from q8s.constants import BASE_IMAGES, WORKSPACE
 
@@ -34,6 +35,36 @@ def rmdir(directory):
             item.unlink()
 
     directory.rmdir()
+
+
+def _read_stream_lines(stream, progress, silent, is_error: bool = False):
+    """
+    Helper to read from a stream line by line (testable without subprocess).
+    """
+    while True:
+        line = stream.readline()
+        if line == '':
+            break
+        if not silent:
+            if is_error:
+                progress.console.print(f"[red]{line}[/red]", end="")
+            else:
+                progress.console.print(line, end="")
+
+
+def _handle_subprocess_output(process, progress, silent):
+    """
+    Read subprocess stdout and stderr line by line (Windows-safe).
+    """
+    if process.stdout:
+        _read_stream_lines(process.stdout, progress, silent)
+        process.stdout.close()
+
+    if process.stderr:
+        _read_stream_lines(process.stderr, progress, silent, is_error=True)
+        process.stderr.close()
+
+    process.wait()
 
 
 @dataclass
@@ -182,28 +213,34 @@ class Project:
             stderr=STDOUT,
             bufsize=1,
             universal_newlines=True,
+            encoding="utf-8",   # force UTF-8 decoding
+            errors="replace",   # avoid crashing on bad bytes
         )
 
-        def handle_output(stream, mask):
-            # Because the process' output is line buffered, there's only ever one
-            # line to read when this function is called
-            line = stream.readline()
-            if not silent:
-                progress.console.print(line, end="")
+        if sys.platform == "win32":
+            # Windows-safe: read line by line instead of using selectors
+            _handle_subprocess_output(build_process, progress, silent)
+        else:
+            def handle_output(stream, mask):
+                # Because the process' output is line buffered, there's only ever one
+                # line to read when this function is called
+                line = stream.readline()
+                if not silent:
+                    progress.console.print(line, end="")
 
-        # Register callback for an "available for read" event from subprocess' stdout stream
-        selector = selectors.DefaultSelector()
-        selector.register(build_process.stdout, selectors.EVENT_READ, handle_output)
+            # Register callback for an "available for read" event from subprocess' stdout stream
+            selector = selectors.DefaultSelector()
+            selector.register(build_process.stdout, selectors.EVENT_READ, handle_output)
 
-        # Loop until subprocess is terminated
-        while build_process.poll() is None:
-            # Wait for events and handle them with their registered callbacks
-            events = selector.select()
-            for key, mask in events:
-                callback = key.data
-                callback(key.fileobj, mask)
+            # Loop until subprocess is terminated
+            while build_process.poll() is None:
+                # Wait for events and handle them with their registered callbacks
+                events = selector.select()
+                for key, mask in events:
+                    callback = key.data
+                    callback(key.fileobj, mask)
 
-        selector.close()
+            selector.close()
 
         if build_process.returncode != 0:
             progress.advance(task)
@@ -231,28 +268,35 @@ class Project:
             stderr=STDOUT,
             bufsize=1,
             universal_newlines=True,
+            encoding="utf-8",   # force UTF-8 decoding
+            errors="replace",   # avoid crashing on bad bytes
         )
 
-        def handle_output(stream, mask):
-            # Because the process' output is line buffered, there's only ever one
-            # line to read when this function is called
-            line = stream.readline()
-            if not silent:
-                progress.console.print(line, end="")
+        if sys.platform == "win32":
+            # Windows-safe: read line by line instead of using selectors
+            _handle_subprocess_output(push_process, progress, silent)
 
-        # Register callback for an "available for read" event from subprocess' stdout stream
-        selector = selectors.DefaultSelector()
-        selector.register(push_process.stdout, selectors.EVENT_READ, handle_output)
+        else:
+            def handle_output(stream, mask):
+                # Because the process' output is line buffered, there's only ever one
+                # line to read when this function is called
+                line = stream.readline()
+                if not silent:
+                    progress.console.print(line, end="")
 
-        # Loop until subprocess is terminated
-        while push_process.poll() is None:
-            # Wait for events and handle them with their registered callbacks
-            events = selector.select()
-            for key, mask in events:
-                callback = key.data
-                callback(key.fileobj, mask)
+            # Register callback for an "available for read" event from subprocess' stdout stream
+            selector = selectors.DefaultSelector()
+            selector.register(push_process.stdout, selectors.EVENT_READ, handle_output)
 
-        selector.close()
+            # Loop until subprocess is terminated
+            while push_process.poll() is None:
+                # Wait for events and handle them with their registered callbacks
+                events = selector.select()
+                for key, mask in events:
+                    callback = key.data
+                    callback(key.fileobj, mask)
+
+            selector.close()
 
         if push_process.returncode != 0:
             progress.advance(task)
