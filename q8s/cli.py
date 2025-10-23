@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from subprocess import Popen
-from time import sleep
+import importlib
 import typer
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 import sys
@@ -162,12 +162,18 @@ def jupyter(
     if registry_pat:
         environment_variables["REGISTRY_PAT"] = registry_pat
 
-    jupyter_process = Popen(
-        [sys.executable, "-m", "jupyter", "lab", "-y"],
-        env=environment_variables,
-    )
+    if importlib.util.find_spec("jupyterlab") is not None:
+        typer.echo("Starting JupyterLab...")
 
-    jupyter_process.wait()
+        jupyter_process = Popen(
+            [sys.executable, "-m", "jupyter", "lab", "-y"],
+            env=environment_variables,
+        )
+
+        jupyter_process.wait()
+    else:
+        typer.echo("JupyterLab is not installed. Please install jupyter first.")
+        raise typer.Exit(code=1)
 
 
 # if __name__ == "__main__":
