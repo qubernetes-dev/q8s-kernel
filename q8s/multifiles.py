@@ -1,5 +1,6 @@
 import ast
 import importlib.util
+from importlib.machinery import ModuleSpec
 import os
 import sys
 from pathlib import Path
@@ -9,13 +10,18 @@ LOCAL = sys.prefix
 
 
 def _resolve_spec(modname: str, package: str | None = None):
+    cwd = os.getcwd()
+    sys.path.insert(0, cwd)
+
     try:
         return importlib.util.find_spec(modname, package=package)
     except Exception:
         return None
+    finally:
+        sys.path.remove(cwd)
 
 
-def _spec_origin_files(spec):
+def _spec_origin_files(spec: ModuleSpec):
     """Yield file paths for a spec (module file, or package __init__ if present)."""
     if not spec:
         return
@@ -29,7 +35,7 @@ def _spec_origin_files(spec):
                 yield init_py
 
 
-def _iter_imports(pyfile: str, cur_pkg: str | None = None):
+def _iter_imports(pyfile: Path | str, cur_pkg: str | None = None):
     """Parse a file and yield (module, level, from_module) entries."""
     try:
         src = Path(pyfile).read_text(encoding="utf-8")
@@ -83,7 +89,7 @@ def _qualname(base_pkg, module, level):
     return f"{prefix}.{module}" if module else prefix
 
 
-def pkg_name_for_file(fpath):
+def pkg_name_for_file(fpath: Path | str):
     """
     Map module file -> containing package name (best effort)
     """
@@ -100,29 +106,23 @@ def pkg_name_for_file(fpath):
     return ".".join(reversed(parts)) if parts else None
 
 
-def collect_imported_files(
-    entry_script: str, restrict_to_top_package: str | None = None
-):
+def collect_imported_files(entry_script: str | Path):
     """
-    Return a set of file paths transitively imported by entry_script.
-    If restrict_to_top_package is given (e.g., 'numpy'), only files under that package are returned.
+    Return a set of file paths transitively imported by entry_script
+    except pip-installed and global interpreter packages.
     """
-    files = set()
+    files: set[str] = set()
     visited_modules = set()
     to_process = []
 
     # Seed with the entry script
     entry_script = os.path.abspath(entry_script)
-    files.add(entry_script)
 
-    # Determine restriction roots (paths) if filtering to a specific top-level package
-    restrict_roots = None
-    if restrict_to_top_package:
-        top_spec = _resolve_spec(restrict_to_top_package)
-        if top_spec and top_spec.submodule_search_locations:
-            restrict_roots = {
-                os.path.abspath(p) for p in top_spec.submodule_search_locations
-            }
+    # If entry script does not exist, return empty set
+    if not os.path.isfile(entry_script):
+        return files
+
+    files.add(entry_script)
 
     # Start by parsing the entry script
     to_process.append((entry_script, pkg_name_for_file(entry_script)))
@@ -131,6 +131,7 @@ def collect_imported_files(
         cur_file, cur_pkg = to_process.pop()
         for mod, level, _ in _iter_imports(cur_file, cur_pkg):
             target = _qualname(cur_pkg, mod, level)
+
             if not target:
                 continue
 
@@ -153,14 +154,7 @@ def collect_imported_files(
                 origin = os.path.abspath(origin)
                 if not os.path.exists(origin):
                     continue
-                # Apply optional package restriction
-                if restrict_roots:
-                    # keep if origin is under any of the top package roots
-                    if not any(
-                        os.path.commonpath([origin, root]) == root
-                        for root in restrict_roots
-                    ):
-                        continue
+
                 if (
                     origin not in files
                     # exclude global interpreter packages

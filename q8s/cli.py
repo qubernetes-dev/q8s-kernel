@@ -11,6 +11,7 @@ from q8s.enums import Target
 from q8s.install import install_my_kernel_spec
 from q8s.project import Project
 from q8s.utils import get_docker_image, get_kubeconfig
+from q8s.workload import Workload
 
 app = typer.Typer()
 
@@ -100,8 +101,6 @@ def execute(
         typer.echo(f"kubeconfig file {kubeconfig} does not exist")
         raise typer.Exit(code=1)
 
-    # kubeconfig = os.environ.get("KUBECONFIG", kubeconfig.as_posix())
-
     if kubeconfig is None:
         typer.echo("KUBECONFIG not set")
         raise typer.Exit(code=1)
@@ -117,13 +116,12 @@ def execute(
         k8s_context.set_container_image(image)
         k8s_context.set_registry_pat(registry_pat)
 
-        with open(file, "r") as f:
-            code = f.read()
-            # output, stream_name = execute_k8s(code, None, image, registry_pat)
-            output, stream_name = k8s_context.execute(code)
+        workload = Workload(entry_script=file)
 
-            print(f"output:\n{output}")
-            print(f"output stream: {stream_name}")
+        output, stream_name = k8s_context.execute_workload(workload=workload)
+
+        print(f"output:\n{output}")
+        print(f"output stream: {stream_name}")
 
 
 @app.command()
