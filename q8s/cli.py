@@ -116,7 +116,7 @@ def execute(
         k8s_context.set_container_image(image)
         k8s_context.set_registry_pat(registry_pat)
 
-        workload = Workload(entry_script=file)
+        workload = Workload.from_entry_script(entry_script=file)
 
         output, stream_name = k8s_context.execute_workload(workload=workload)
 

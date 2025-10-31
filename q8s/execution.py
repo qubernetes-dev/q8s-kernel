@@ -90,62 +90,6 @@ class K8sContext:
     def __registry_credentials_secret_name(self):
         return f"{self.name}-regcred"
 
-    def __create_job_object(self, code: str) -> client.V1Job:
-        """
-        Create a job object with the given code.
-        """
-        prepare_task = self.__progress.add_task("[cyan]Prepare job...", total=1)
-        env = self.__prepare_environment()
-
-        self.jm.hook.prepare(
-            target=self.target, name=self.name, namespace=self.namespace, env=self.__env
-        )
-
-        logging.debug(f"Container image: {self.container_image}")
-
-        template = extract_non_none_value(
-            self.jm.hook.makejob(
-                # code=code,
-                env=env,
-                container_image=self.container_image,
-                target=self.target,
-                registry_credentials_secret_name=self.__registry_credentials_secret_name(),
-                name=self.name,
-                registry_pat=self.registry_pat,
-            )
-        )
-
-        # Create the specification of deployment
-        spec = client.V1JobSpec(template=template)  # , ttl_seconds_after_finished=10
-
-        # Instantiate the job object
-        job_spec = client.V1Job(
-            api_version="batch/v1",
-            kind="Job",
-            metadata=client.V1ObjectMeta(
-                name=self.name,
-                namespace=self.namespace,
-                labels={"qubernetes.dev/job.type": "jupyter"},
-            ),
-            spec=spec,
-        )
-
-        job = self.batch_api_instance.create_namespaced_job(
-            body=job_spec, namespace=self.namespace
-        )
-        self.__progress.console.print("Job created")
-
-        self.__create_config_map_object(job, code=code)
-        self.__progress.console.print("Application code created")
-        self.__create_environment_secret()
-        self.__progress.console.print("Environment variables created")
-
-        if self.registry_pat:
-            self.__create_registry_credentials_secret()
-
-        self.__progress.advance(prepare_task, 1)
-        return job
-
     def __create_job_object_from_workload(self, workload: Workload) -> client.V1Job:
         """
         Create a job object with the given workload.
@@ -479,34 +423,6 @@ class K8sContext:
             )
 
         return env
-
-    def execute(
-        self, code: str | None = None, file: Path | None = None
-    ) -> tuple[str, str]:
-        """
-        Execute the given code.
-        """
-
-        try:
-            self.__create_job_object(code=code, file=file)
-
-            if self.jupyter_logger is not None:
-                self.jupyter_logger(f"Job {self.name} created")
-
-            stream = self.__complete_and_get_job_status()
-
-            job = self.__get_pods_in_job()
-            logs = self.__get_job_logs(job)
-            self.__progress.console.print("Fetched job logs")
-
-            return logs, stream
-        except KeyboardInterrupt:
-            return "Task interrupted by user", "stderr"
-        except:
-            return "An error occurred.", "stderr"
-        finally:
-            self.__delete_job()
-            pass
 
     def execute_workload(self, workload: Workload) -> tuple[str, str]:
         """
