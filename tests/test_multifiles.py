@@ -1,5 +1,3 @@
-# test_iter_imports_unittest.py
-# Replace 'yourmodule' with the actual module where _iter_imports is defined.
 from q8s.multifiles import _iter_imports
 import unittest
 import tempfile
