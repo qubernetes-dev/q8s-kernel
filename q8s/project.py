@@ -93,8 +93,8 @@ class Q8STargets:
 
 @dataclass
 class Q8SDocker:
-    username: str
-    registry: str
+    username: Optional[str]
+    registry: Optional[str]
 
 @dataclass
 class Q8SProject:
@@ -338,6 +338,7 @@ class Project:
         else:
             # Neither present: image:tag
             # TODO: Raise exception
+            pass
 
     def __check_cache_file(self, target: str, file: str):
         cachepath = join(self.__path, ".q8s_cache", target, file)
