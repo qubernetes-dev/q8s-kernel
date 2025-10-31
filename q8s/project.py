@@ -93,8 +93,8 @@ class Q8STargets:
 
 @dataclass
 class Q8SDocker:
-    username: str
-
+    username: Optional[str]
+    registry: Optional[str]
 
 @dataclass
 class Q8SProject:
@@ -322,7 +322,23 @@ class Project:
         return self.configuration.docker.username
 
     def __image_name(self, target: str):
-        return f"{self.__docker_login()}/q8s-{self.name.lower()}:{target}"
+        registry = self.configuration.docker.registry
+        username = self.__docker_login()
+
+        # Build image name based on available information
+        if registry and username:
+            # Both registry and username present: registry/username/image:tag
+            return f"{registry}/{username}/q8s-{self.name.lower()}:{target}"
+        elif registry:
+            # Only registry present: registry/image:tag
+            return f"{registry}/q8s-{self.name.lower()}:{target}"
+        elif username:
+            # Only username present: username/image:tag
+            return f"{username}/q8s-{self.name.lower()}:{target}"
+        else:
+            # Neither present: image:tag
+            # TODO: Raise exception
+            pass
 
     def __check_cache_file(self, target: str, file: str):
         cachepath = join(self.__path, ".q8s_cache", target, file)
