@@ -9,6 +9,7 @@ from dotenv import dotenv_values
 from kubernetes import client, config, watch
 import pluggy
 from rich.progress import Progress
+from pathlib import Path
 
 from q8s.constants import WORKSPACE
 from q8s.enums import Target
@@ -16,6 +17,7 @@ from q8s.plugins.job_template_spec import JobTemplatePluginSpec
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin
 from q8s.plugins.cuda_job import CUDAJobTemplatePlugin
 from q8s.utils import extract_non_none_value
+from .workload import Workload
 
 
 def load_env():
@@ -88,9 +90,9 @@ class K8sContext:
     def __registry_credentials_secret_name(self):
         return f"{self.name}-regcred"
 
-    def __create_job_object(self, code: str):
+    def __create_job_object_from_workload(self, workload: Workload) -> client.V1Job:
         """
-        Create a job object with the given code.
+        Create a job object with the given workload.
         """
         prepare_task = self.__progress.add_task("[cyan]Prepare job...", total=1)
         env = self.__prepare_environment()
@@ -103,13 +105,14 @@ class K8sContext:
 
         template = extract_non_none_value(
             self.jm.hook.makejob(
-                code=code,
+                # code=code,
                 env=env,
                 container_image=self.container_image,
                 target=self.target,
                 registry_credentials_secret_name=self.__registry_credentials_secret_name(),
                 name=self.name,
                 registry_pat=self.registry_pat,
+                workload=workload,
             )
         )
 
@@ -133,7 +136,7 @@ class K8sContext:
         )
         self.__progress.console.print("Job created")
 
-        self.__create_config_map_object(code, job)
+        self.__create_config_map_object_from_workload(job, workload=workload)
         self.__progress.console.print("Application code created")
         self.__create_environment_secret()
         self.__progress.console.print("Environment variables created")
@@ -144,15 +147,50 @@ class K8sContext:
         self.__progress.advance(prepare_task, 1)
         return job
 
-    def __create_config_map_object(self, code: str, job: client.V1Job):
+    def __create_config_map_object(self, job: client.V1Job, code: str):
         """
         Create a ConfigMap object with the given code.
         """
+
+        data = {}
+        data["main.py"] = code
+
         # Configureate ConfigMap from a local file
         configmap = client.V1ConfigMap(
             api_version="v1",
             kind="ConfigMap",
-            data={"main.py": code},
+            data=data,
+            metadata=client.V1ObjectMeta(
+                name=self.name,
+                owner_references=[
+                    client.V1OwnerReference(
+                        api_version="batch/v1",
+                        kind="Job",
+                        name=job.metadata.name,
+                        uid=job.metadata.uid,
+                        # block_owner_deletion=True,
+                        # controller=True,
+                    )
+                ],
+            ),
+        )
+
+        self.core_api_instance.create_namespaced_config_map(
+            namespace=self.namespace, body=configmap
+        )
+
+    def __create_config_map_object_from_workload(
+        self, job: client.V1Job, workload: Workload
+    ):
+        """
+        Create a ConfigMap object with the given workload.
+        """
+
+        # Configureate ConfigMap from a local file
+        configmap = client.V1ConfigMap(
+            api_version="v1",
+            kind="ConfigMap",
+            data=workload.data,
             metadata=client.V1ObjectMeta(
                 name=self.name,
                 owner_references=[
@@ -386,13 +424,13 @@ class K8sContext:
 
         return env
 
-    def execute(self, code: str) -> tuple[str, str]:
+    def execute_workload(self, workload: Workload) -> tuple[str, str]:
         """
-        Execute the given code.
+        Execute the given workload.
         """
 
         try:
-            self.__create_job_object(code=code)
+            self.__create_job_object_from_workload(workload=workload)
 
             if self.jupyter_logger is not None:
                 self.jupyter_logger(f"Job {self.name} created")

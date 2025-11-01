@@ -5,6 +5,7 @@ from kubernetes import client
 
 from q8s.constants import WORKSPACE
 from q8s.enums import Target
+from q8s.workload import Workload
 
 hookspec = pluggy.HookspecMarker("q8s")
 hookimpl = pluggy.HookimplMarker("q8s")
@@ -32,6 +33,7 @@ class JobTemplatePluginSpec:
         registry_pat: str | None,
         registry_credentials_secret_name: str,
         container_image: str,
+        workload: Workload,
         env: Dict[
             str,
             str | None,
