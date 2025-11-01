@@ -29,30 +29,54 @@ class Workload:
 
     @classmethod
     def from_code(cls, code: str):
+        """
+        Create a Workload from code string
+        """
         return cls(code=code)
 
     @classmethod
     def from_entry_script(cls, entry_script: Path | str):
+        """
+        Create a Workload from an entry script file path
+        """
         return cls(entry_script=entry_script)
 
     @property
     def files(self) -> list[Path]:
+        """
+        List of all files in the workload
+        """
         return self.__files
 
     @property
     def entry_script(self) -> Path:
+        """
+        Entry script path relative to base path
+        """
         return self.__relative_path(self.__entry_script)
 
     @property
     def data(self) -> dict[str, str]:
+        """
+        Dictionary mapping file paths to their contents
+        """
         return self.__data
 
     @property
     def mappings(self):
+        """
+        Dictionary mapping relative file paths to their unique path mappings
+        """
         return {self.__path_mapping(f): self.__relative_path(f) for f in self.__files}
 
     def __relative_path(self, file: Path | str) -> str:
+        """
+        Get the relative path of a file with respect to the base path
+        """
         return os.path.relpath(os.path.abspath(file), self.__base_path)
 
     def __path_mapping(self, file: Path | str) -> str:
+        """
+        Get the unique path mapping for a file
+        """
         return self.__relative_path(file).replace("/", "__")
