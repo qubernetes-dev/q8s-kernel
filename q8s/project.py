@@ -93,7 +93,7 @@ class Q8STargets:
 
 @dataclass
 class Q8SDocker:
-    username: Optional[str]
+    username: str
     registry: Optional[str]
 
 @dataclass
@@ -112,6 +112,8 @@ class CacheNotBuiltException(Exception):
 class ProjectNotFoundException(Exception):
     pass
 
+class InvalidProjectConfigurationException(Exception):
+    pass
 
 class Project:
     name: str
@@ -329,16 +331,14 @@ class Project:
         if registry and username:
             # Both registry and username present: registry/username/image:tag
             return f"{registry}/{username}/q8s-{self.name.lower()}:{target}"
-        elif registry:
-            # Only registry present: registry/image:tag
-            return f"{registry}/q8s-{self.name.lower()}:{target}"
         elif username:
             # Only username present: username/image:tag
             return f"{username}/q8s-{self.name.lower()}:{target}"
         else:
             # Neither present: image:tag
-            # TODO: Raise exception
-            pass
+            raise InvalidProjectConfigurationException(
+                "Docker username and/or registry must be specified in the project configuration"
+            )
 
     def __check_cache_file(self, target: str, file: str):
         cachepath = join(self.__path, ".q8s_cache", target, file)
