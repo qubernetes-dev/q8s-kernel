@@ -4,6 +4,7 @@ from kubernetes import client
 from q8s.constants import WORKSPACE
 from q8s.enums import Target
 from q8s.plugins.job_template_spec import hookimpl
+from q8s.workload import Workload
 
 MEMORY = os.environ.get("MEMORY", "32Gi")
 
@@ -20,6 +21,7 @@ class CUDAJobTemplatePlugin:
         registry_pat: str | None,
         registry_credentials_secret_name: str,
         container_image: str,
+        workload: Workload,
         env: Dict[
             str,
             str | None,
@@ -30,12 +32,14 @@ class CUDAJobTemplatePlugin:
         if target != Target.gpu:
             return None
 
+        volume_name = f"app-volume-{name}"
+
         container = client.V1Container(
             name="quantum-routine",
             image=container_image,
             env=env,
             command=["python"],
-            args=[f"{WORKSPACE}/main.py"],
+            args=[f"{WORKSPACE}/{workload.entry_script}"],
             image_pull_policy="Always",
             resources=(
                 client.V1ResourceRequirements(
@@ -61,7 +65,7 @@ class CUDAJobTemplatePlugin:
             ),
             volume_mounts=[
                 client.V1VolumeMount(
-                    name="app-volume", mount_path=WORKSPACE, read_only=True
+                    name=volume_name, mount_path=WORKSPACE, read_only=True
                 )
             ],
         )
@@ -83,8 +87,14 @@ class CUDAJobTemplatePlugin:
                 restart_policy="Never",
                 volumes=[
                     client.V1Volume(
-                        name="app-volume",
-                        config_map=client.V1ConfigMapVolumeSource(name=name),
+                        name=volume_name,
+                        config_map=client.V1ConfigMapVolumeSource(
+                            name=name,
+                            items=[
+                                client.V1KeyToPath(key=k, path=v)
+                                for k, v in workload.mappings.items()
+                            ],
+                        ),
                     )
                 ],
             ),

@@ -7,6 +7,7 @@ import logging
 from q8s.enums import Target
 from q8s.execution import K8sContext
 from q8s.project import CacheNotBuiltException, Project, ProjectNotFoundException
+from q8s.workload import Workload
 
 FORMAT = "[%(levelname)s %(asctime)-15s q8s_kernel] %(message)s"
 logging.basicConfig(level=logging.INFO, format=FORMAT)
@@ -85,7 +86,9 @@ class Q8sKernel(Kernel):
     ):
         logging.debug(f"Executing code:\n{code}")
 
-        output, stream_name = self.k8s_context.execute(code)
+        workload = Workload.from_code(code)
+
+        output, stream_name = self.k8s_context.execute_workload(workload=workload)
 
         self.send_response(self.iopub_socket, "clear_output", {"wait": True})
 
