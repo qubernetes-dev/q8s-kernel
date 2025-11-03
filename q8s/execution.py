@@ -105,7 +105,6 @@ class K8sContext:
 
         template = extract_non_none_value(
             self.jm.hook.makejob(
-                # code=code,
                 env=env,
                 container_image=self.container_image,
                 target=self.target,

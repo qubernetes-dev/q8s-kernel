@@ -32,6 +32,8 @@ class CUDAJobTemplatePlugin:
         if target != Target.gpu:
             return None
 
+        volume_name = f"app-volume-{name}"
+
         container = client.V1Container(
             name="quantum-routine",
             image=container_image,
@@ -63,7 +65,7 @@ class CUDAJobTemplatePlugin:
             ),
             volume_mounts=[
                 client.V1VolumeMount(
-                    name="app-volume", mount_path=WORKSPACE, read_only=True
+                    name=volume_name, mount_path=WORKSPACE, read_only=True
                 )
             ],
         )
@@ -85,7 +87,7 @@ class CUDAJobTemplatePlugin:
                 restart_policy="Never",
                 volumes=[
                     client.V1Volume(
-                        name="app-volume",
+                        name=volume_name,
                         config_map=client.V1ConfigMapVolumeSource(
                             name=name,
                             items=[
