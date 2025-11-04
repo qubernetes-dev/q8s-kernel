@@ -112,7 +112,7 @@ class CacheNotBuiltException(Exception):
 class ProjectNotFoundException(Exception):
     pass
 
-class InvalidProjectConfigurationException(Exception):
+class ProjectInvalidConfigurationException(Exception):
     pass
 
 class Project:
@@ -336,7 +336,7 @@ class Project:
             return f"{username}/q8s-{self.name.lower()}:{target}"
         else:
             # Neither present: image:tag
-            raise InvalidProjectConfigurationException(
+            raise ProjectInvalidConfigurationException(
                 "Docker username and/or registry must be specified in the project configuration"
             )
 
