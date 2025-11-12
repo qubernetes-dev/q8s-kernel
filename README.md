@@ -1,5 +1,9 @@
 # q8s
 
+[![PyPI version](https://img.shields.io/pypi/v/q8s.svg)](https://pypi.org/project/q8s/)
+[![Python versions](https://img.shields.io/pypi/pyversions/q8s.svg)](https://pypi.org/project/q8s/)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/q8s?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/q8s)
+
 Toolset for executing quantum jobs on [Qubernetes](https://www.qubernetes.dev).
 
 ## Installation
