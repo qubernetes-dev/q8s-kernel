@@ -136,7 +136,7 @@ class K8sContext:
         self.__progress.console.print("Job created")
 
         self.__create_config_map_object_from_workload(job, workload=workload)
-        self.__progress.console.print("Application code created")
+        self.__progress.console.print("Application code attached")
         self.__create_environment_secret()
         self.__progress.console.print("Environment variables created")
 

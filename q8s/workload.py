@@ -1,4 +1,5 @@
 from pathlib import Path
+import configparser
 import os
 
 from .multifiles import collect_imported_files
@@ -9,21 +10,38 @@ class Workload:
     Represents a mutifile workload consisting of an entry script and its imported files
     """
 
+    __pyproject_root: Path | None = None
+
     def __init__(self, entry_script: Path | str = None, code: str = None):
         if entry_script is not None:
-            self.__entry_script = Path(os.path.abspath(entry_script))
-            self.__base_path = self.__entry_script.parent
 
-            self.__files = collect_imported_files(self.__entry_script)
+            if self.__is_src_layout():
+                self.__entry_script = Path(os.path.abspath(entry_script))
+                self.__base_path = self.__pyproject_root
+
+                self.__files = collect_imported_files(
+                    self.__entry_script, is_project=True
+                )
+
+            else:
+                self.__entry_script = Path(os.path.abspath(entry_script))
+                self.__base_path = self.__entry_script.parent
+
+                self.__files = collect_imported_files(
+                    self.__entry_script, is_project=False
+                )
+
             self.__data = {
                 self.__path_mapping(f): open(f, "r").read() for f in self.__files
             }
+
         elif code is not None:
             self.__entry_script = Path(os.path.abspath("main.py"))
             self.__base_path = os.getcwd()
             self.__files = [Path(self.__entry_script)]
 
             self.__data = {self.__path_mapping(self.__entry_script): code}
+
         else:
             raise ValueError("Either entry_script or code must be provided.")
 
@@ -56,6 +74,20 @@ class Workload:
         return self.__relative_path(self.__entry_script)
 
     @property
+    def is_src_project(self) -> bool:
+        """
+        Whether the project uses a src/ layout
+        """
+        return self.__pyproject_root is not None
+
+    @property
+    def entry_module(self) -> str:
+        """
+        Entry script module name
+        """
+        return self.entry_script.replace("/", ".")[:-3]  # strip .py
+
+    @property
     def data(self) -> dict[str, str]:
         """
         Dictionary mapping file paths to their contents
@@ -80,3 +112,42 @@ class Workload:
         Get the unique path mapping for a file
         """
         return self.__relative_path(file).replace("/", "__")
+
+    def __pyproject_root(self, start: Path | None = None) -> Path | None:
+        """
+        Find the project root by looking for setup.cfg or pyproject.toml
+        """
+
+        if (
+            Path(os.path.join(os.getcwd(), "setup.cfg")).exists()
+            or Path(os.path.join(os.getcwd(), "pyproject.toml")).exists()
+        ):
+            return Path(os.getcwd()).resolve()
+
+        return None
+
+    def __is_src_layout(self) -> bool:
+        """
+        Determine if the project uses a src/ layout
+        """
+        root = self.__pyproject_root()
+
+        if root is None:
+            return False
+
+        cfg_path = root / "setup.cfg"
+        if not cfg_path.exists():
+            return False
+
+        config = configparser.ConfigParser()
+        config.read(cfg_path)
+
+        # Very simple heuristic: [options.packages.find] where = src
+        if config.has_section("options.packages.find"):
+            where = config.get("options.packages.find", "where", fallback="").strip()
+            if where == "src":
+                self.__pyproject_root = root
+                return True
+
+        # You could add similar checks for pyproject.toml if you use that
+        return False

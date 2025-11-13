@@ -16,10 +16,7 @@ class CPUJobTemplatePlugin:
         registry_credentials_secret_name: str,
         container_image: str,
         workload: Workload,
-        env: Dict[
-            str,
-            str | None,
-        ],
+        env: list[client.V1EnvVar],
         target: Target,
     ) -> client.V1PodTemplateSpec:
 
@@ -27,6 +24,9 @@ class CPUJobTemplatePlugin:
             return None
 
         volume_name = f"app-volume-{name}"
+
+        if workload.is_src_project:
+            env.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
 
         container = client.V1Container(
             name="quantum-routine",
