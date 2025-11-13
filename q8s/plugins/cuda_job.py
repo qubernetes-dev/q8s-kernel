@@ -22,10 +22,7 @@ class CUDAJobTemplatePlugin:
         registry_credentials_secret_name: str,
         container_image: str,
         workload: Workload,
-        env: Dict[
-            str,
-            str | None,
-        ],
+        env: list[client.V1EnvVar],
         target: Target,
     ) -> client.V1PodTemplateSpec:
 
@@ -34,12 +31,19 @@ class CUDAJobTemplatePlugin:
 
         volume_name = f"app-volume-{name}"
 
+        if workload.is_src_project:
+            env.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
+
         container = client.V1Container(
             name="quantum-routine",
             image=container_image,
             env=env,
             command=["python"],
-            args=[f"{WORKSPACE}/{workload.entry_script}"],
+            args=(
+                ["-m", workload.entry_module] + workload.args
+                if workload.is_src_project
+                else [f"{WORKSPACE}/{workload.entry_script}"] + workload.args
+            ),
             image_pull_policy="Always",
             resources=(
                 client.V1ResourceRequirements(

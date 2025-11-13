@@ -11,6 +11,7 @@ class Workload:
     """
 
     __pyproject_root: Path | None = None
+    __args: list[str] = []
 
     def __init__(self, entry_script: Path | str = None, code: str = None):
         if entry_script is not None:
@@ -100,6 +101,19 @@ class Workload:
         Dictionary mapping relative file paths to their unique path mappings
         """
         return {self.__path_mapping(f): self.__relative_path(f) for f in self.__files}
+
+    @property
+    def args(self) -> list[str]:
+        """
+        Additional arguments for the workload
+        """
+        return self.__args
+
+    def set_args(self, args: list[str]) -> None:
+        """
+        Set additional arguments for the workload
+        """
+        self.__args = args
 
     def __relative_path(self, file: Path | str) -> str:
         """

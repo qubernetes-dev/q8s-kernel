@@ -71,7 +71,12 @@ def build(
     project.update_images_cache()
 
 
-@app.command()
+@app.command(
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+    }
+)
 def execute(
     file: Annotated[Path, typer.Argument(help="Python file to be executed")],
     target: Annotated[
@@ -88,6 +93,7 @@ def execute(
             envvar="REGISTRY_PAT",
         ),
     ] = None,
+    args: Annotated[list[str], typer.Argument(help="Additional arguments")] = None,
 ):
     project = Project()
 
@@ -117,6 +123,7 @@ def execute(
         k8s_context.set_registry_pat(registry_pat)
 
         workload = Workload.from_entry_script(entry_script=file)
+        workload.set_args(args or [])
 
         output, stream_name = k8s_context.execute_workload(workload=workload)
 

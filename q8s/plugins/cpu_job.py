@@ -33,7 +33,11 @@ class CPUJobTemplatePlugin:
             image=container_image,
             env=env,
             command=["python"],
-            args=[f"{WORKSPACE}/{workload.entry_script}"],
+            args=(
+                ["-m", workload.entry_module] + workload.args
+                if workload.is_src_project
+                else [f"{WORKSPACE}/{workload.entry_script}"] + workload.args
+            ),
             image_pull_policy="Always",
             volume_mounts=[
                 client.V1VolumeMount(
