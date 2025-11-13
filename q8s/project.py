@@ -1,3 +1,4 @@
+import configparser
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -43,7 +44,7 @@ def _read_stream_lines(stream, progress, silent, is_error: bool = False):
     """
     while True:
         line = stream.readline()
-        if line == '':
+        if line == "":
             break
         if not silent:
             if is_error:
@@ -96,6 +97,7 @@ class Q8SDocker:
     username: str
     registry: Optional[str]
 
+
 @dataclass
 class Q8SProject:
     name: str
@@ -112,8 +114,10 @@ class CacheNotBuiltException(Exception):
 class ProjectNotFoundException(Exception):
     pass
 
+
 class ProjectInvalidConfigurationException(Exception):
     pass
+
 
 class Project:
     name: str
@@ -215,14 +219,15 @@ class Project:
             stderr=STDOUT,
             bufsize=1,
             universal_newlines=True,
-            encoding="utf-8",   # force UTF-8 decoding
-            errors="replace",   # avoid crashing on bad bytes
+            encoding="utf-8",  # force UTF-8 decoding
+            errors="replace",  # avoid crashing on bad bytes
         )
 
         if sys.platform == "win32":
             # Windows-safe: read line by line instead of using selectors
             _handle_subprocess_output(build_process, progress, silent)
         else:
+
             def handle_output(stream, mask):
                 # Because the process' output is line buffered, there's only ever one
                 # line to read when this function is called
@@ -270,8 +275,8 @@ class Project:
             stderr=STDOUT,
             bufsize=1,
             universal_newlines=True,
-            encoding="utf-8",   # force UTF-8 decoding
-            errors="replace",   # avoid crashing on bad bytes
+            encoding="utf-8",  # force UTF-8 decoding
+            errors="replace",  # avoid crashing on bad bytes
         )
 
         if sys.platform == "win32":
@@ -279,6 +284,7 @@ class Project:
             _handle_subprocess_output(push_process, progress, silent)
 
         else:
+
             def handle_output(stream, mask):
                 # Because the process' output is line buffered, there's only ever one
                 # line to read when this function is called
@@ -325,7 +331,7 @@ class Project:
 
     def __image_name(self, target: str):
         registry = self.configuration.docker.registry
-        username = self.__docker_login()
+        username = self.__docker_login().lower()
 
         # Build image name based on available information
         if registry and username:
@@ -388,6 +394,15 @@ class Project:
             file=f,
         )
         print(f"LABEL org.opencontainers.image.title={self.name}", file=f)
+
+        url = self.__get_project_url()
+
+        if url is not None:
+            print(
+                f"LABEL org.opencontainers.image.source={url.strip()}",
+                file=f,
+            )
+
         print("", file=f)
 
         print(f"WORKDIR {WORKSPACE}", file=f)
@@ -399,3 +414,20 @@ class Project:
             raise Exception(f"Target {target} not found")
 
         return getattr(self.configuration.targets, target)
+
+    def __get_project_url(self) -> Optional[str]:
+        """
+        Get the project URL from setup.cfg if available
+        """
+        cfg_path = Path(self.__path) / "setup.cfg"
+        if not cfg_path.exists():
+            return None
+
+        config = configparser.ConfigParser()
+        config.read(cfg_path)
+
+        url = config.get("metadata", "url", fallback=None)
+        if url is not None:
+            return url.strip()
+
+        return None
