@@ -17,6 +17,22 @@ app = typer.Typer()
 
 
 @app.command()
+def init(
+    images: Annotated[
+        bool, typer.Option(help="Initialize images cache if build in a CI pipeline")
+    ] = False,
+):
+    project = Project()
+    project.init_cache()
+
+    if images:
+        project.images_from_ci()
+        project.update_images_cache()
+
+    print(f"Project {project.name} initialized")
+
+
+@app.command()
 def build(
     init: Annotated[bool, typer.Option(help="Initialize project")] = False,
     target: Annotated[
