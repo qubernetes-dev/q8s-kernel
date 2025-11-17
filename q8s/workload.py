@@ -16,16 +16,15 @@ class Workload:
 
         if entry_script is not None:
 
-            if self.__is_src_layout():
-                self.__entry_script = Path(os.path.abspath(entry_script))
+            self.__entry_script = Path(os.path.abspath(entry_script))
+
+            if self.__detect_and_set_src_layout():
                 self.__base_path = self.__pyproject_root
 
                 self.__files = collect_imported_files(
                     self.__entry_script, is_project=True
                 )
-
             else:
-                self.__entry_script = Path(os.path.abspath(entry_script))
                 self.__base_path = self.__entry_script.parent
 
                 self.__files = collect_imported_files(
@@ -141,7 +140,7 @@ class Workload:
 
         return None
 
-    def __is_src_layout(self) -> bool:
+    def __detect_and_set_src_layout(self) -> bool:
         """
         Determine if the project uses a src/ layout
         """
