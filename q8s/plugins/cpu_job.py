@@ -25,13 +25,14 @@ class CPUJobTemplatePlugin:
 
         volume_name = f"app-volume-{name}"
 
+        env_var = list(env)
         if workload.is_src_project:
-            env.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
+            env_var.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
 
         container = client.V1Container(
             name="quantum-routine",
             image=container_image,
-            env=env,
+            env=env_var,
             command=["python"],
             args=(
                 ["-m", workload.entry_module] + workload.args

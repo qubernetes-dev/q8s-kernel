@@ -7,13 +7,13 @@ from .multifiles import collect_imported_files
 
 class Workload:
     """
-    Represents a mutifile workload consisting of an entry script and its imported files
+    Represents a multifile workload consisting of an entry script and its imported files
     """
 
-    __pyproject_root: Path | None = None
-    __args: list[str] = []
-
     def __init__(self, entry_script: Path | str = None, code: str = None):
+        self.__pyproject_root: Path | None = None
+        self.__args: list[str] = []
+
         if entry_script is not None:
 
             if self.__is_src_layout():
@@ -32,9 +32,10 @@ class Workload:
                     self.__entry_script, is_project=False
                 )
 
-            self.__data = {
-                self.__path_mapping(f): open(f, "r").read() for f in self.__files
-            }
+            self.__data = {}
+            for f in self.__files:
+                with open(f, "r", encoding="utf-8") as file:
+                    self.__data[self.__path_mapping(f)] = file.read()
 
         elif code is not None:
             self.__entry_script = Path(os.path.abspath("main.py"))
@@ -86,7 +87,7 @@ class Workload:
         """
         Entry script module name
         """
-        return self.entry_script.replace("/", ".")[:-3]  # strip .py
+        return self.entry_script.replace(os.path.sep, ".")[:-3]  # strip .py
 
     @property
     def data(self) -> dict[str, str]:
@@ -127,7 +128,7 @@ class Workload:
         """
         return self.__relative_path(file).replace("/", "__")
 
-    def __pyproject_root(self, start: Path | None = None) -> Path | None:
+    def __find_pyproject_root(self) -> Path | None:
         """
         Find the project root by looking for setup.cfg or pyproject.toml
         """
@@ -144,7 +145,7 @@ class Workload:
         """
         Determine if the project uses a src/ layout
         """
-        root = self.__pyproject_root()
+        root = self.__find_pyproject_root()
 
         if root is None:
             return False
