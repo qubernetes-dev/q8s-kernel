@@ -17,6 +17,22 @@ app = typer.Typer()
 
 
 @app.command()
+def init(
+    images: Annotated[
+        bool, typer.Option(help="Initialize images cache if build in a CI pipeline")
+    ] = False,
+):
+    project = Project()
+    project.init_cache()
+
+    if images:
+        project.images_from_ci()
+        project.update_images_cache()
+
+    print(f"Project {project.name} initialized")
+
+
+@app.command()
 def build(
     init: Annotated[bool, typer.Option(help="Initialize project")] = False,
     target: Annotated[
@@ -71,7 +87,12 @@ def build(
     project.update_images_cache()
 
 
-@app.command()
+@app.command(
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+    }
+)
 def execute(
     file: Annotated[Path, typer.Argument(help="Python file to be executed")],
     target: Annotated[
@@ -88,6 +109,7 @@ def execute(
             envvar="REGISTRY_PAT",
         ),
     ] = None,
+    args: Annotated[list[str], typer.Argument(help="Additional arguments")] = None,
 ):
     project = Project()
 
@@ -117,6 +139,7 @@ def execute(
         k8s_context.set_registry_pat(registry_pat)
 
         workload = Workload.from_entry_script(entry_script=file)
+        workload.set_args(args or [])
 
         output, stream_name = k8s_context.execute_workload(workload=workload)
 

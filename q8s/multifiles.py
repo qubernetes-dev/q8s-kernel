@@ -9,16 +9,17 @@ GLOBAL = getattr(sys, "base_prefix", sys.prefix)
 LOCAL = sys.prefix
 
 
-def _resolve_spec(modname: str, package: str | None = None):
-    cwd = os.getcwd()
-    sys.path.insert(0, cwd)
+def _resolve_spec(modname: str, package: str | None = None, is_project: bool = False):
+    """Resolve a module spec, temporarily adjusting sys.path for project layout."""
+    cwd = Path(os.getcwd()) / "src" if is_project else Path(os.getcwd())
+    sys.path.insert(0, str(cwd))
 
     try:
         return importlib.util.find_spec(modname, package=package)
     except Exception:
         return None
     finally:
-        sys.path.remove(cwd)
+        sys.path.remove(str(cwd))
 
 
 def _spec_origin_files(spec: ModuleSpec):
@@ -106,7 +107,9 @@ def pkg_name_for_file(fpath: Path | str):
     return ".".join(reversed(parts)) if parts else None
 
 
-def collect_imported_files(entry_script: str | Path):
+def collect_imported_files(
+    entry_script: str | Path, is_project: bool = True
+) -> set[Path]:
     """
     Return a set of file paths transitively imported by entry_script
     except pip-installed and global interpreter packages.
@@ -136,7 +139,7 @@ def collect_imported_files(entry_script: str | Path):
                 continue
 
             # Explore the resolved module/package
-            spec = _resolve_spec(target)
+            spec = _resolve_spec(target, is_project=is_project)
             if not spec:
                 continue
 
