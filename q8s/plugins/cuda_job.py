@@ -3,13 +3,14 @@ from typing import Dict
 from kubernetes import client
 from q8s.constants import WORKSPACE
 from q8s.enums import Target
+from q8s.plugins.job import JobPlugin
 from q8s.plugins.job_template_spec import hookimpl
 from q8s.workload import Workload
 
 MEMORY = os.environ.get("MEMORY", "32Gi")
 
 
-class CUDAJobTemplatePlugin:
+class CUDAJobTemplatePlugin(JobPlugin):
     """
     This plugin is used to create a job template for a GPU job.
     """
@@ -34,6 +35,8 @@ class CUDAJobTemplatePlugin:
         env_var = list(env)
         if workload.is_src_project:
             env_var.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
+
+        self.patch_environment(env_var)
 
         container = client.V1Container(
             name="quantum-routine",

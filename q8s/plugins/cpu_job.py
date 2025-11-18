@@ -1,4 +1,5 @@
 from typing import Dict
+from q8s.plugins.job import JobPlugin
 from q8s.plugins.job_template_spec import hookimpl
 from q8s.enums import Target
 from kubernetes import client
@@ -6,7 +7,7 @@ from q8s.constants import WORKSPACE
 from q8s.workload import Workload
 
 
-class CPUJobTemplatePlugin:
+class CPUJobTemplatePlugin(JobPlugin):
 
     @hookimpl
     def makejob(
@@ -29,6 +30,8 @@ class CPUJobTemplatePlugin:
         if workload.is_src_project:
             env_var.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
 
+        self.patch_environment(env_var)
+
         container = client.V1Container(
             name="quantum-routine",
             image=container_image,
@@ -39,6 +42,8 @@ class CPUJobTemplatePlugin:
                 if workload.is_src_project
                 else [f"{WORKSPACE}/{workload.entry_script}"] + workload.args
             ),
+            # command=["mlflow"],
+            # args=["run", ".", "-e", "q8s", "--env-manager", "local"],
             image_pull_policy="Always",
             volume_mounts=[
                 client.V1VolumeMount(
