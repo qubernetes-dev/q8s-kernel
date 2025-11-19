@@ -1,8 +1,11 @@
 import unittest
 from unittest.mock import patch, MagicMock
 from kubernetes import client
-from q8s.plugins.job_template_spec import CPUJobTemplatePlugin, CUDAJobTemplatePlugin
+
+# from q8s.plugins.job_template_spec import CPUJobTemplatePlugin, CUDAJobTemplatePlugin
 from q8s.enums import Target
+from q8s.plugins.cpu_job import CPUJobTemplatePlugin
+from q8s.plugins.cuda_job import CUDAJobTemplatePlugin
 
 
 class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
