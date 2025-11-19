@@ -5,7 +5,12 @@ from pathlib import Path
 
 from git import Actor, Repo
 
-from q8s.plugins.utils.git_info import _detect_branch_from_env, get_git_info
+from q8s.plugins.utils.git_info import (
+    GitExtraInfo,
+    GitExtraReason,
+    _detect_branch_from_env,
+    get_git_info,
+)
 
 
 class TestDetectBranchFromEnv(unittest.TestCase):
@@ -63,7 +68,8 @@ class TestGetGitInfo(unittest.TestCase):
         self.assertIsNone(info.commit)
         self.assertIsNone(info.branch)
         self.assertIsNone(info.remote_url)
-        self.assertEqual(info.extra["reason"], "not_a_git_repo")
+        self.assertEqual(type(info.extra), GitExtraReason)
+        self.assertEqual(info.extra.reason, "not_a_git_repo")
 
     def test_collects_repo_branch_commit_and_remote(self):
         path, repo = self._create_repo_with_commit()
@@ -74,9 +80,10 @@ class TestGetGitInfo(unittest.TestCase):
         self.assertEqual(info.commit, repo.head.commit.hexsha)
         self.assertEqual(info.branch, repo.active_branch.name)
         self.assertEqual(info.remote_url, "https://github.com/org/project.git")
-        self.assertEqual(info.extra["branch_source"], "repo")
-        self.assertEqual(info.extra["git_dir"], repo.git_dir)
-        self.assertEqual(info.extra["working_tree_dir"], repo.working_tree_dir)
+        self.assertEqual(type(info.extra), GitExtraInfo)
+        self.assertEqual(info.extra.branch_source, "repo")
+        self.assertEqual(info.extra.git_dir, repo.git_dir)
+        self.assertEqual(info.extra.working_tree_dir, repo.working_tree_dir)
 
     def test_detached_head_uses_env_branch(self):
         path, repo = self._create_repo_with_commit()
@@ -88,7 +95,7 @@ class TestGetGitInfo(unittest.TestCase):
             info = get_git_info(path)
 
         self.assertEqual(info.branch, "ci-branch")
-        self.assertEqual(info.extra["branch_source"], "env")
+        self.assertEqual(info.extra.branch_source, "env")
 
 
 if __name__ == "__main__":

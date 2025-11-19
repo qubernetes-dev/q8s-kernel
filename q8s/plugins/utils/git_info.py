@@ -61,7 +61,7 @@ def get_git_info(path: str = ".") -> GitInfo:
             commit=None,
             branch=None,
             remote_url=None,
-            extra={"reason": "not_a_git_repo"},
+            extra=GitExtraReason(reason="not_a_git_repo"),
         )
 
     # Commit SHA
@@ -97,11 +97,11 @@ def get_git_info(path: str = ".") -> GitInfo:
     except (AttributeError, IndexError, ValueError):
         remote_url = None
 
-    extra = {
-        "branch_source": branch_source,
-        "git_dir": repo.git_dir,
-        "working_tree_dir": repo.working_tree_dir,
-    }
+    extra = GitExtraInfo(
+        branch_source=branch_source,
+        git_dir=repo.git_dir,
+        working_tree_dir=repo.working_tree_dir,
+    )
 
     return GitInfo(
         commit=commit,
