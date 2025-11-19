@@ -146,38 +146,6 @@ class K8sContext:
         self.__progress.advance(prepare_task, 1)
         return job
 
-    def __create_config_map_object(self, job: client.V1Job, code: str):
-        """
-        Create a ConfigMap object with the given code.
-        """
-
-        data = {}
-        data["main.py"] = code
-
-        # Configureate ConfigMap from a local file
-        configmap = client.V1ConfigMap(
-            api_version="v1",
-            kind="ConfigMap",
-            data=data,
-            metadata=client.V1ObjectMeta(
-                name=self.name,
-                owner_references=[
-                    client.V1OwnerReference(
-                        api_version="batch/v1",
-                        kind="Job",
-                        name=job.metadata.name,
-                        uid=job.metadata.uid,
-                        # block_owner_deletion=True,
-                        # controller=True,
-                    )
-                ],
-            ),
-        )
-
-        self.core_api_instance.create_namespaced_config_map(
-            namespace=self.namespace, body=configmap
-        )
-
     def __create_config_map_object_from_workload(
         self, job: client.V1Job, workload: Workload
     ):
