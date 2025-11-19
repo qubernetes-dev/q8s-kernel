@@ -4,23 +4,7 @@ from git import Repo
 import os
 
 
-def get_git_info(path="."):
-    repo = Repo(path, search_parent_directories=False)
-
-    commit = repo.head.commit.hexsha
-    branch = repo.active_branch.name if not repo.head.is_detached else None
-
-    # remote may be missing (e.g., local-only repo)
-    try:
-        remote_url = repo.remotes.origin.url
-    except Exception:
-        remote_url = None
-
-    return {
-        "commit": commit,
-        "branch": branch,
-        "remote_url": remote_url,
-    }
+from q8s.plugins.utils.git_info import get_git_info
 
 
 class JobPlugin:
@@ -37,12 +21,13 @@ class JobPlugin:
 
         git_info = get_git_info(os.getcwd())
 
-        env.append(client.V1EnvVar(name="MLFLOW_GIT_COMMIT", value=git_info["commit"]))
+        print(git_info)
 
-        env.append(client.V1EnvVar(name="MLFLOW_GIT_BRANCH", value=git_info["branch"]))
+        env.append(client.V1EnvVar(name="MLFLOW_GIT_COMMIT", value=git_info.commit))
 
+        env.append(client.V1EnvVar(name="MLFLOW_GIT_BRANCH", value=git_info.branch))
         env.append(
-            client.V1EnvVar(name="MLFLOW_GIT_REPO_URL", value=git_info["remote_url"])
+            client.V1EnvVar(name="MLFLOW_GIT_REPO_URL", value=git_info.remote_url)
         )
         env.append(client.V1EnvVar(name="GIT_PYTHON_REFRESH", value="quiet"))
 
