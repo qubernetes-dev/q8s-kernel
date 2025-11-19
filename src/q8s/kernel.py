@@ -1,12 +1,13 @@
-import os
-from ipykernel.kernelbase import Kernel
-from ipykernel.comm import CommManager
-from rich.progress import Progress, SpinnerColumn, TextColumn
 import logging
+import os
+
+from ipykernel.comm import CommManager
+from ipykernel.kernelbase import Kernel
+from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from q8s.enums import Target
 from q8s.execution import K8sContext
-from q8s.project import CacheNotBuiltException, Project, ProjectNotFoundException
+from q8s.project import Project
 from q8s.workload import Workload
 
 FORMAT = "[%(levelname)s %(asctime)-15s q8s_kernel] %(message)s"

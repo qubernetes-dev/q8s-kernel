@@ -1,5 +1,6 @@
 import base64
 import io
+
 import matplotlib.backend_bases
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 

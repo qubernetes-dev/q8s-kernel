@@ -1,8 +1,9 @@
+import unittest
+from io import StringIO
 from os import remove
 from os.path import exists, join
-from io import StringIO
-import unittest
 from unittest.mock import Mock
+
 from rich.progress import Progress, SpinnerColumn
 
 from q8s.project import Project

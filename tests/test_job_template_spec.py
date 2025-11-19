@@ -1,6 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
-from kubernetes import client
+from unittest.mock import MagicMock, patch
 
 from q8s.enums import Target
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin

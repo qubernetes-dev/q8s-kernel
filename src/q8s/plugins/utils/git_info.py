@@ -1,8 +1,8 @@
-from dataclasses import dataclass
-from typing import Optional, Dict, Any
 import os
+from dataclasses import dataclass
+from typing import Optional
 
-from git import Repo, InvalidGitRepositoryError, NoSuchPathError
+from git import InvalidGitRepositoryError, NoSuchPathError, Repo
 
 
 @dataclass

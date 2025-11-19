@@ -1,9 +1,8 @@
-import os
 from typing import Dict
+
 import pluggy
 from kubernetes import client
 
-from q8s.constants import WORKSPACE
 from q8s.enums import Target
 from q8s.workload import Workload
 

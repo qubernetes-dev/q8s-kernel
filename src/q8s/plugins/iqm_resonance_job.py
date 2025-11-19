@@ -1,13 +1,14 @@
+from typing import Dict
+
 from kubernetes import client
 
 from q8s.constants import WORKSPACE
 from q8s.enums import Target
-from q8s.plugins.job import JobPlugin
 from q8s.plugins.job_template_spec import hookimpl
 from q8s.workload import Workload
 
 
-class CPUJobTemplatePlugin(JobPlugin):
+class IQMJobTemplatePlugin:
 
     @hookimpl
     def makejob(
@@ -17,37 +18,26 @@ class CPUJobTemplatePlugin(JobPlugin):
         registry_credentials_secret_name: str,
         container_image: str,
         workload: Workload,
-        env: list[client.V1EnvVar],
+        env: Dict[
+            str,
+            str | None,
+        ],
         target: Target,
     ) -> client.V1PodTemplateSpec:
 
-        if target != Target.cpu:
+        if target != Target.qpu:
             return None
-
-        volume_name = f"app-volume-{name}"
-
-        env_var = list(env)
-        if workload.is_src_project:
-            env_var.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
-
-        self.patch_environment_with_git_info(env_var)
 
         container = client.V1Container(
             name="quantum-routine",
             image=container_image,
-            env=env_var,
+            env=env,
             command=["python"],
-            args=(
-                ["-m", workload.entry_module] + workload.args
-                if workload.is_src_project
-                else [f"{WORKSPACE}/{workload.entry_script}"] + workload.args
-            ),
+            args=[f"{WORKSPACE}/main.py"],
             image_pull_policy="Always",
             volume_mounts=[
                 client.V1VolumeMount(
-                    name=volume_name,
-                    mount_path=WORKSPACE,
-                    read_only=True,
+                    name="app-volume", mount_path=WORKSPACE, read_only=True
                 )
             ],
         )
@@ -68,14 +58,8 @@ class CPUJobTemplatePlugin(JobPlugin):
                 restart_policy="Never",
                 volumes=[
                     client.V1Volume(
-                        name=volume_name,
-                        config_map=client.V1ConfigMapVolumeSource(
-                            name=name,
-                            items=[
-                                client.V1KeyToPath(key=k, path=v)
-                                for k, v in workload.mappings.items()
-                            ],
-                        ),
+                        name="app-volume",
+                        config_map=client.V1ConfigMapVolumeSource(name=name),
                     )
                 ],
             ),

@@ -1,22 +1,20 @@
 import base64
-from json import JSONEncoder, loads
 import logging
-import os
 import random
 import string
-from time import sleep
+from json import JSONEncoder, loads
+
+import pluggy
 from dotenv import dotenv_values
 from kubernetes import client, config, watch
-import pluggy
 from rich.progress import Progress
-from pathlib import Path
 
-from q8s.constants import WORKSPACE
 from q8s.enums import Target
-from q8s.plugins.job_template_spec import JobTemplatePluginSpec
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin
 from q8s.plugins.cuda_job import CUDAJobTemplatePlugin
+from q8s.plugins.job_template_spec import JobTemplatePluginSpec
 from q8s.utils import extract_non_none_value
+
 from .workload import Workload
 
 
@@ -288,7 +286,7 @@ class K8sContext:
             self.__progress.console.print(
                 f"Job removed. status='{data['status']['conditions'][0]['type']}'"
             )
-        except:
+        except Exception:
             self.__progress.console.print(
                 f"Job removed. status='{str(api_response.status)}'"
             )
@@ -330,7 +328,7 @@ class K8sContext:
         for event in w.stream(
             self.batch_api_instance.list_namespaced_job,
             namespace=self.namespace,
-            label_selector=f"qubernetes.dev/job.type=jupyter",
+            label_selector="qubernetes.dev/job.type=jupyter",
         ):
             if event["object"].metadata.name == self.name:
 
@@ -411,7 +409,7 @@ class K8sContext:
             return logs, stream
         except KeyboardInterrupt:
             return "Task interrupted by user", "stderr"
-        except:
+        except Exception:
             return "An error occurred.", "stderr"
         finally:
             self.__delete_job()

@@ -1,9 +1,9 @@
-import os
 import unittest
-from unittest.mock import patch, MagicMock
-from q8s.utils import get_docker_image
+from unittest.mock import patch
+
 from q8s.enums import Target
-from q8s.project import ProjectNotFoundException, CacheNotBuiltException
+from q8s.project import CacheNotBuiltException, ProjectNotFoundException
+from q8s.utils import get_docker_image
 
 
 class TestGetDockerImage(unittest.TestCase):
