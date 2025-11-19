@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import patch, MagicMock
 from kubernetes import client
 
-# from q8s.plugins.job_template_spec import CPUJobTemplatePlugin, CUDAJobTemplatePlugin
 from q8s.enums import Target
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin
 from q8s.plugins.cuda_job import CUDAJobTemplatePlugin
@@ -37,6 +36,12 @@ class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
         registry_credentials_secret_name = "test-secret"
         container_image = "test-image"
         env = {"TEST_ENV": "value"}
+        workload = MagicMock()
+        workload.is_src_project = False
+        workload.entry_module = "module"
+        workload.entry_script = "script.py"
+        workload.args = []
+        workload.mappings = {"main.py": "main.py"}
         target = Target.cpu
 
         result = plugin.makejob(
@@ -44,6 +49,7 @@ class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
             registry_pat,
             registry_credentials_secret_name,
             container_image,
+            workload,
             env,
             target,
         )
@@ -84,6 +90,12 @@ class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
         registry_credentials_secret_name = "test-secret"
         container_image = "test-image"
         env = {"TEST_ENV": "value"}
+        workload = MagicMock()
+        workload.is_src_project = False
+        workload.entry_module = "module"
+        workload.entry_script = "script.py"
+        workload.args = []
+        workload.mappings = {"main.py": "main.py"}
         target = Target.gpu
 
         result = plugin.makejob(
@@ -91,6 +103,7 @@ class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
             registry_pat,
             registry_credentials_secret_name,
             container_image,
+            workload,
             env,
             target,
         )
@@ -113,6 +126,12 @@ class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
         registry_credentials_secret_name = "test-secret"
         container_image = "test-image"
         env = {"TEST_ENV": "value"}
+        workload = MagicMock()
+        workload.is_src_project = False
+        workload.entry_module = "module"
+        workload.entry_script = "script.py"
+        workload.args = []
+        workload.mappings = {"main.py": "main.py"}
         target = "invalid-target"
 
         result = plugin.makejob(
@@ -121,6 +140,7 @@ class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
             registry_credentials_secret_name,
             container_image,
             env,
+            workload,
             target,
         )
 

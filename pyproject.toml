@@ -50,3 +50,7 @@ development = ["pyre-check"]
 
 [project.scripts]
 q8sctl = "q8s.cli:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
