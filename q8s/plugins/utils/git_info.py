@@ -1,5 +1,3 @@
-# from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 import os
@@ -8,11 +6,29 @@ from git import Repo, InvalidGitRepositoryError, NoSuchPathError
 
 
 @dataclass
+class GitExtraInfo:
+    """Additional Git information dataclass"""
+
+    branch_source: Optional[str]
+    git_dir: Optional[str]
+    working_tree_dir: Optional[str]
+
+
+@dataclass
+class GitExtraReason:
+    """Reason for missing Git information"""
+
+    reason: str
+
+
+@dataclass
 class GitInfo:
+    """Git information dataclass"""
+
     commit: Optional[str]
     branch: Optional[str]
     remote_url: Optional[str]
-    extra: Dict[str, Any]
+    extra: GitExtraInfo | GitExtraReason
 
 
 def _detect_branch_from_env() -> Optional[str]:
@@ -51,10 +67,11 @@ def get_git_info(path: str = ".") -> GitInfo:
     # Commit SHA
     try:
         commit = repo.head.commit.hexsha
-    except TypeError:
+    except ValueError:
         commit = None
 
     # Branch (handle detached HEAD, CI environments, etc.)
+    branch = None
     if repo.head.is_detached:
         branch = _detect_branch_from_env()
         branch_source = "env" if branch else "detached_head"
@@ -68,16 +85,16 @@ def get_git_info(path: str = ".") -> GitInfo:
         remote_url = origin.url
         if remote_url.startswith("git@"):
             # git@github.com:org/repo.git -> https://github.com/org/repo.git
-            host, _, path = remote_url.partition(":")
-            remote_url = f"https://{host.removeprefix('git@')}/{path}"
+            host, _, url_path = remote_url.partition(":")
+            remote_url = f"https://{host.removeprefix('git@')}/{url_path}"
         elif remote_url.startswith("ssh://"):
             # ssh://git@github.com/org/repo.git -> https://github.com/org/repo.git
             stripped = remote_url.removeprefix("ssh://")
             if stripped.startswith("git@"):
                 stripped = stripped.removeprefix("git@")
-            host, _, path = stripped.partition("/")
-            remote_url = f"https://{host}/{path}"
-    except Exception:
+            host, _, url_path = stripped.partition("/")
+            remote_url = f"https://{host}/{url_path}"
+    except (AttributeError, IndexError, ValueError):
         remote_url = None
 
     extra = {
