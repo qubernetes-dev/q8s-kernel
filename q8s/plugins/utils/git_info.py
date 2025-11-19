@@ -39,7 +39,7 @@ def get_git_info(path: str = ".") -> GitInfo:
     Returns GitInfo with None fields if not in a git repo.
     """
     try:
-        repo = Repo(path, search_parent_directories=False)
+        repo = Repo(path, search_parent_directories=True)
     except (InvalidGitRepositoryError, NoSuchPathError):
         return GitInfo(
             commit=None,
