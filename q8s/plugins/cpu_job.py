@@ -42,8 +42,6 @@ class CPUJobTemplatePlugin(JobPlugin):
                 if workload.is_src_project
                 else [f"{WORKSPACE}/{workload.entry_script}"] + workload.args
             ),
-            # command=["mlflow"],
-            # args=["run", ".", "-e", "q8s", "--env-manager", "local"],
             image_pull_policy="Always",
             volume_mounts=[
                 client.V1VolumeMount(
