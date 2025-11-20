@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from kubernetes import client
+
 from q8s.enums import Target
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin
 from q8s.plugins.cuda_job import CUDAJobTemplatePlugin
@@ -34,7 +36,7 @@ class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
         registry_pat = None
         registry_credentials_secret_name = "test-secret"
         container_image = "test-image"
-        env = {"TEST_ENV": "value"}
+        env = [client.V1EnvVar(name="TEST_ENV", value="value")]
         workload = MagicMock()
         workload.is_src_project = False
         workload.entry_module = "module"
@@ -88,7 +90,7 @@ class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
         registry_pat = "test-pat"
         registry_credentials_secret_name = "test-secret"
         container_image = "test-image"
-        env = {"TEST_ENV": "value"}
+        env = [client.V1EnvVar(name="TEST_ENV", value="value")]
         workload = MagicMock()
         workload.is_src_project = False
         workload.entry_module = "module"
@@ -124,7 +126,7 @@ class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
         registry_pat = None
         registry_credentials_secret_name = "test-secret"
         container_image = "test-image"
-        env = {"TEST_ENV": "value"}
+        env = [client.V1EnvVar(name="TEST_ENV", value="value")]
         workload = MagicMock()
         workload.is_src_project = False
         workload.entry_module = "module"
