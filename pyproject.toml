@@ -46,7 +46,7 @@ exclude = ["paper-benchmarks", "benchmark", "playground"]
 [project.optional-dependencies]
 benchmark = ["pandas", "testbook", "mlflow"]
 
-development = ["pyre-check"]
+development = ["pyre-check", "pre-commit", "pytest", "pytest-cov"]
 
 [project.scripts]
 q8sctl = "q8s.cli:app"
@@ -54,3 +54,4 @@ q8sctl = "q8s.cli:app"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+addopts = "--cov=q8s --cov-report=term-missing"
