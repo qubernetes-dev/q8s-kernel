@@ -271,6 +271,25 @@ class TestProject(unittest.TestCase):
 
     @unittest.mock.patch("q8s.project.get_git_info")
     @unittest.mock.patch("q8s.project.load")
+    def test_image_name_with_git_branch_sanitized(
+        self, mock_load: Mock, mock_get_git_info: Mock
+    ):
+        mock_load.return_value = mocked_configuration
+        mock_get_git_info.return_value = GitInfo(
+            commit="abc123",
+            branch="feature/1",
+            remote_url="https://example.com/repo.git",
+            extra={},
+        )
+
+        project = Project("tests/fixtures/cache")
+        image_name = project._Project__image_name("cpu")
+
+        self.assertEqual(image_name, "vstirbu/q8s-example:cpu-feature-1")
+        mock_get_git_info.assert_called_once_with("tests/fixtures/cache")
+
+    @unittest.mock.patch("q8s.project.get_git_info")
+    @unittest.mock.patch("q8s.project.load")
     def test_image_name_without_git_branch(
         self, mock_load: Mock, mock_get_git_info: Mock
     ):
