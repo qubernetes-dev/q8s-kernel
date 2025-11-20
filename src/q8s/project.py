@@ -14,6 +14,7 @@ from dacite import from_dict
 from rich.progress import Progress
 
 from q8s.constants import BASE_IMAGES, WORKSPACE
+from q8s.plugins.utils.git_info import get_git_info
 
 
 def load(path: str):
@@ -143,6 +144,12 @@ class Project:
     @property
     def kubeconfig(self):
         return Path(self.configuration.kubeconfig)
+
+    @property
+    def __git_info(self):
+        if not hasattr(self, "_git_info_cache"):
+            self._git_info_cache = get_git_info(self.__path)
+        return self._git_info_cache
 
     def init_cache(self):
         """
@@ -342,18 +349,32 @@ class Project:
         registry = self.configuration.docker.registry
         username = self.__docker_login().lower()
 
+        tag = None
+
         # Build image name based on available information
         if registry and username:
             # Both registry and username present: registry/username/image:tag
-            return f"{registry}/{username}/q8s-{self.name.lower()}:{target}"
+            tag = f"{registry}/{username}/q8s-{self.name.lower()}:{target}"
         elif username:
             # Only username present: username/image:tag
-            return f"{username}/q8s-{self.name.lower()}:{target}"
+            tag = f"{username}/q8s-{self.name.lower()}:{target}"
         else:
             # Neither present: image:tag
             raise ProjectInvalidConfigurationException(
                 "Docker username and/or registry must be specified in the project configuration"
             )
+
+        git_info = self.__git_info
+
+        if git_info.branch is not None:
+            sanitized_branch = "".join(
+                c if (c.isalnum() or c in "._-") else "-"
+                for c in git_info.branch.lower()
+            ).strip(".-")
+
+            tag += f"-{sanitized_branch}"
+
+        return tag
 
     def __check_cache_file(self, target: str, file: str):
         cachepath = join(self.__path, ".q8s_cache", target, file)

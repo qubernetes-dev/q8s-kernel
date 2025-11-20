@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 from rich.progress import Progress, SpinnerColumn
 
+from q8s.plugins.utils.git_info import GitInfo
 from q8s.project import Project
 
 mocked_configuration = {
@@ -95,16 +96,23 @@ class TestProject(unittest.TestCase):
 
         project.clear_cache()
 
+    @unittest.mock.patch("q8s.project.get_git_info")
     @unittest.mock.patch("q8s.project.sys.platform", "win32")
     @unittest.mock.patch("q8s.project.Popen")
     @unittest.mock.patch("q8s.project.load")
-    def test_build_container(self, mock_load: Mock, mock_popen: Mock):
+    def test_build_container(
+        self, mock_load: Mock, mock_popen: Mock, mock_get_git_info: Mock
+    ):
         mock_load.return_value = mocked_configuration
+        mock_get_git_info.return_value = GitInfo(
+            commit=None,
+            branch=None,
+            remote_url=None,
+            extra={},
+        )
 
         project_path = "tests/fixtures/cache"
         project = Project(project_path)
-
-        project.init_cache()
 
         mock_process = _completed_process()
         mock_popen.return_value = mock_process
@@ -130,11 +138,62 @@ class TestProject(unittest.TestCase):
             ],
         )
 
+    @unittest.mock.patch("q8s.project.get_git_info")
     @unittest.mock.patch("q8s.project.sys.platform", "win32")
     @unittest.mock.patch("q8s.project.Popen")
     @unittest.mock.patch("q8s.project.load")
-    def test_push_container(self, mock_load: Mock, mock_popen: Mock):
+    def test_build_container_in_repo(
+        self, mock_load: Mock, mock_popen: Mock, mock_get_git_info: Mock
+    ):
         mock_load.return_value = mocked_configuration
+        mock_get_git_info.return_value = GitInfo(
+            commit="abc123",
+            branch="main",
+            remote_url="https://example.com/repo.git",
+            extra={},
+        )
+
+        project_path = "tests/fixtures/cache"
+        project = Project(project_path)
+
+        mock_process = _completed_process()
+        mock_popen.return_value = mock_process
+
+        with Progress(SpinnerColumn()) as progress:
+            project.build_container(
+                target="cpu", progress=progress, silent=True, push=False
+            )
+
+        mock_popen.assert_called_once()
+        self.assertEqual(
+            mock_popen.call_args.args[0],
+            [
+                "docker",
+                "build",
+                "--progress",
+                "plain",
+                "--platform",
+                "linux/amd64",
+                "--tag",
+                "vstirbu/q8s-example:cpu-main",
+                join(project_path, ".q8s_cache", "cpu"),
+            ],
+        )
+
+    @unittest.mock.patch("q8s.project.get_git_info")
+    @unittest.mock.patch("q8s.project.sys.platform", "win32")
+    @unittest.mock.patch("q8s.project.Popen")
+    @unittest.mock.patch("q8s.project.load")
+    def test_push_container(
+        self, mock_load: Mock, mock_popen: Mock, mock_get_git_info: Mock
+    ):
+        mock_load.return_value = mocked_configuration
+        mock_get_git_info.return_value = GitInfo(
+            commit=None,
+            branch=None,
+            remote_url=None,
+            extra={},
+        )
 
         project_path = "tests/fixtures/cache"
         project = Project(project_path)
@@ -156,3 +215,91 @@ class TestProject(unittest.TestCase):
             mock_popen.call_args_list[1].args[0],
             ["docker", "push", "vstirbu/q8s-example:cpu"],
         )
+
+    @unittest.mock.patch("q8s.project.get_git_info")
+    @unittest.mock.patch("q8s.project.sys.platform", "win32")
+    @unittest.mock.patch("q8s.project.Popen")
+    @unittest.mock.patch("q8s.project.load")
+    def test_push_container_in_repo(
+        self, mock_load: Mock, mock_popen: Mock, mock_get_git_info: Mock
+    ):
+        mock_load.return_value = mocked_configuration
+        mock_get_git_info.return_value = GitInfo(
+            commit="abc123",
+            branch="main",
+            remote_url="https://example.com/repo.git",
+            extra={},
+        )
+
+        project_path = "tests/fixtures/cache"
+        project = Project(project_path)
+
+        project.init_cache()
+
+        mock_build_process = _completed_process()
+        mock_push_process = _completed_process()
+        mock_popen.side_effect = [mock_build_process, mock_push_process]
+
+        with Progress(SpinnerColumn()) as progress:
+            project.build_container(
+                target="cpu", progress=progress, silent=True, push=False
+            )
+            project.push_container(target="cpu", progress=progress, silent=True)
+
+        self.assertEqual(mock_popen.call_count, 2)
+        self.assertEqual(
+            mock_popen.call_args_list[1].args[0],
+            ["docker", "push", "vstirbu/q8s-example:cpu-main"],
+        )
+
+    @unittest.mock.patch("q8s.project.get_git_info")
+    @unittest.mock.patch("q8s.project.load")
+    def test_image_name_with_git_branch(self, mock_load: Mock, mock_get_git_info: Mock):
+        mock_load.return_value = mocked_configuration
+        mock_get_git_info.return_value = GitInfo(
+            commit="abc123",
+            branch="main",
+            remote_url="https://example.com/repo.git",
+            extra={},
+        )
+
+        project = Project("tests/fixtures/cache")
+        image_name = project._Project__image_name("cpu")
+
+        self.assertEqual(image_name, "vstirbu/q8s-example:cpu-main")
+        mock_get_git_info.assert_called_once_with("tests/fixtures/cache")
+
+    @unittest.mock.patch("q8s.project.get_git_info")
+    @unittest.mock.patch("q8s.project.load")
+    def test_image_name_with_git_branch_sanitized(
+        self, mock_load: Mock, mock_get_git_info: Mock
+    ):
+        mock_load.return_value = mocked_configuration
+        mock_get_git_info.return_value = GitInfo(
+            commit="abc123",
+            branch="feature/1",
+            remote_url="https://example.com/repo.git",
+            extra={},
+        )
+
+        project = Project("tests/fixtures/cache")
+        image_name = project._Project__image_name("cpu")
+
+        self.assertEqual(image_name, "vstirbu/q8s-example:cpu-feature-1")
+        mock_get_git_info.assert_called_once_with("tests/fixtures/cache")
+
+    @unittest.mock.patch("q8s.project.get_git_info")
+    @unittest.mock.patch("q8s.project.load")
+    def test_image_name_without_git_branch(
+        self, mock_load: Mock, mock_get_git_info: Mock
+    ):
+        mock_load.return_value = mocked_configuration
+        mock_get_git_info.return_value = GitInfo(
+            commit=None, branch=None, remote_url=None, extra={"reason": "no_repo"}
+        )
+
+        project = Project("tests/fixtures/cache")
+        image_name = project._Project__image_name("cpu")
+
+        self.assertEqual(image_name, "vstirbu/q8s-example:cpu")
+        mock_get_git_info.assert_called_once_with("tests/fixtures/cache")
