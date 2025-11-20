@@ -412,7 +412,7 @@ class Project:
 
         if target == "gpu":
             print("# Base image specifications are available at:", file=f)
-            print("https://github.com/qubernetes-dev/images/tree/main/cuda", file=f)
+            print("# https://github.com/qubernetes-dev/images/tree/main/cuda", file=f)
 
         print(f"FROM {BASE_IMAGES[target]}", file=f)
         print("", file=f)
