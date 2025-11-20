@@ -45,7 +45,13 @@ exclude = ["paper-benchmarks", "benchmark", "playground"]
 [project.optional-dependencies]
 benchmark = ["pandas", "testbook", "mlflow"]
 
-development = ["pyre-check", "pre-commit", "pytest", "pytest-cov"]
+development = [
+  "pyre-check",
+  "pre-commit",
+  "pytest",
+  "pytest-cov",
+  "dockerfile-parse",
+]
 
 [project.scripts]
 q8sctl = "q8s.cli:app"
