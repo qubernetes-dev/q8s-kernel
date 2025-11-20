@@ -1,9 +1,10 @@
-from q8s.multifiles import _iter_imports
-import unittest
-import tempfile
-from pathlib import Path
-import textwrap
 import shutil
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+
+from q8s.multifiles import _iter_imports
 
 
 def write(tmpdir: Path, rel: str, content: str) -> Path:

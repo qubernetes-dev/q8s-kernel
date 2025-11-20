@@ -1,6 +1,6 @@
-from pathlib import Path
 import configparser
 import os
+from pathlib import Path
 
 from .multifiles import collect_imported_files
 

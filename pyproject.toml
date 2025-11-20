@@ -14,7 +14,6 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
-  "Programming Language :: Python :: 3.14",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
 ]
@@ -40,12 +39,18 @@ requires = ["setuptools >= 61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
+where = ["src"]
 exclude = ["paper-benchmarks", "benchmark", "playground"]
 
 [project.optional-dependencies]
 benchmark = ["pandas", "testbook", "mlflow"]
 
-development = ["pyre-check"]
+development = ["pyre-check", "pre-commit", "pytest", "pytest-cov"]
 
 [project.scripts]
 q8sctl = "q8s.cli:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "--cov=q8s --cov-report=term-missing"

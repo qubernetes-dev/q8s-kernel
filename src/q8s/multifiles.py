@@ -1,8 +1,8 @@
 import ast
 import importlib.util
-from importlib.machinery import ModuleSpec
 import os
 import sys
+from importlib.machinery import ModuleSpec
 from pathlib import Path
 
 GLOBAL = getattr(sys, "base_prefix", sys.prefix)

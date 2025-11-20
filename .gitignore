@@ -37,6 +37,12 @@ mlartifacts/
 # Kubernetes config
 config.*
 
+# Coverage reports
+.coverage
+coverage.xml
+htmlcov/
+
+
 playground/
 benchmark/
 paper-benchmarks/

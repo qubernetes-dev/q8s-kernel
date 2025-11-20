@@ -1,9 +1,9 @@
-from typing import Dict
+from kubernetes import client
+
+from q8s.constants import WORKSPACE
+from q8s.enums import Target
 from q8s.plugins.job import JobPlugin
 from q8s.plugins.job_template_spec import hookimpl
-from q8s.enums import Target
-from kubernetes import client
-from q8s.constants import WORKSPACE
 from q8s.workload import Workload
 
 

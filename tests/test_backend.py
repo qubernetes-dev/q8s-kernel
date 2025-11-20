@@ -1,8 +1,9 @@
 import unittest
-from unittest.mock import patch, MagicMock
-from q8s.matplotlib.backend import Q8SLoggerBackend
+from unittest.mock import patch
 
 import matplotlib.pyplot as plt
+
+from q8s.matplotlib.backend import Q8SLoggerBackend
 
 
 class TestQ8SLoggerBackend(unittest.TestCase):
