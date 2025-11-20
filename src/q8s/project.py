@@ -145,6 +145,12 @@ class Project:
     def kubeconfig(self):
         return Path(self.configuration.kubeconfig)
 
+    @property
+    def __git_info(self):
+        if not hasattr(self, "_git_info_cache"):
+            self._git_info_cache = get_git_info(self.__path)
+        return self._git_info_cache
+
     def init_cache(self):
         """
         Initialize the cache directory
@@ -358,10 +364,15 @@ class Project:
                 "Docker username and/or registry must be specified in the project configuration"
             )
 
-        git_info = get_git_info(self.__path)
+        git_info = self.__git_info
 
         if git_info.branch is not None:
-            tag += f"-{git_info.branch}"
+            sanitized_branch = "".join(
+                c if (c.isalnum() or c in "._-") else "-"
+                for c in git_info.branch.lower()
+            ).strip(".-")
+
+            tag += f"-{sanitized_branch}"
 
         return tag
 
