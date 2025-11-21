@@ -1,0 +1,6 @@
+- id: q8sctl
+  name: q8sctl CLI hook
+  entry: q8sctl
+  language: python
+  additional_dependencies: ["."]
+  pass_filenames: false
