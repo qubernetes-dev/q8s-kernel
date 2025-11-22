@@ -1,3 +1,4 @@
+import json
 import unittest
 from io import StringIO
 from os import remove
@@ -162,6 +163,82 @@ class TestProject(unittest.TestCase):
                 "COPY requirements.txt .",
                 "RUN pip install --no-cache -r requirements.txt",
             ],
+        )
+
+    @unittest.mock.patch("q8s.project.get_git_info")
+    @unittest.mock.patch("q8s.project.load")
+    def test_create_bakefile_no_repo(self, mock_load: Mock, mock_get_git_info: Mock):
+        mock_load.return_value = mocked_configuration
+        mock_get_git_info.return_value = GitInfo(
+            commit=None,
+            branch=None,
+            remote_url=None,
+            extra={},
+        )
+
+        project = Project("tests/fixtures/cache")
+
+        bakefile = StringIO()
+        project._Project___create_bakefile(bakefile)
+
+        bakefile_data = json.loads(bakefile.getvalue())
+
+        self.assertEqual(bakefile_data["group"]["default"]["targets"], ["cpu", "gpu"])
+        self.assertEqual(
+            bakefile_data["target"]["cpu"],
+            {
+                "context": "./cpu",
+                "dockerfile": "Dockerfile",
+                "tags": ["vstirbu/q8s-example:cpu"],
+                "platforms": ["linux/amd64"],
+            },
+        )
+        self.assertEqual(
+            bakefile_data["target"]["gpu"],
+            {
+                "context": "./gpu",
+                "dockerfile": "Dockerfile",
+                "tags": ["vstirbu/q8s-example:gpu"],
+                "platforms": ["linux/amd64"],
+            },
+        )
+
+    @unittest.mock.patch("q8s.project.get_git_info")
+    @unittest.mock.patch("q8s.project.load")
+    def test_create_bakefile_in_repo(self, mock_load: Mock, mock_get_git_info: Mock):
+        mock_load.return_value = mocked_configuration
+        mock_get_git_info.return_value = GitInfo(
+            commit="abc123",
+            branch="main",
+            remote_url="https://example.com/repo.git",
+            extra={},
+        )
+
+        project = Project("tests/fixtures/cache")
+
+        bakefile = StringIO()
+        project._Project___create_bakefile(bakefile)
+
+        bakefile_data = json.loads(bakefile.getvalue())
+
+        self.assertEqual(bakefile_data["group"]["default"]["targets"], ["cpu", "gpu"])
+        self.assertEqual(
+            bakefile_data["target"]["cpu"],
+            {
+                "context": "./cpu",
+                "dockerfile": "Dockerfile",
+                "tags": ["vstirbu/q8s-example:cpu-main"],
+                "platforms": ["linux/amd64"],
+            },
+        )
+        self.assertEqual(
+            bakefile_data["target"]["gpu"],
+            {
+                "context": "./gpu",
+                "dockerfile": "Dockerfile",
+                "tags": ["vstirbu/q8s-example:gpu-main"],
+                "platforms": ["linux/amd64"],
+            },
         )
 
     @unittest.mock.patch("q8s.project.get_git_info")

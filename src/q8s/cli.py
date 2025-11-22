@@ -17,7 +17,12 @@ from q8s.workload import Workload
 app = typer.Typer()
 
 
-@app.command()
+@app.command(
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+    }
+)
 def init(
     images: Annotated[
         bool, typer.Option(help="Initialize images cache if build in a CI pipeline")
