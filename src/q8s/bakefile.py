@@ -46,7 +46,7 @@ class Bakefile:
         self,
         name: str,
         tags: list[str],
-        platforms: list[BuildPlatform],
+        platforms: list[BuildPlatform | str],
     ):
         bake_target = BakeTargetName(name)
 
