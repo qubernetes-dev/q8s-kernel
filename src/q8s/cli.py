@@ -141,8 +141,8 @@ def execute(
     ) as progress:
         k8s_context = K8sContext(kubeconfig.as_posix(), progress=progress)
         k8s_context.set_target(target)
-        k8s_context.set_container_image(image)
         k8s_context.set_registry_pat(registry_pat)
+        k8s_context.set_container_image(image)
 
         workload = Workload.from_entry_script(entry_script=file)
         workload.set_args(args or [])

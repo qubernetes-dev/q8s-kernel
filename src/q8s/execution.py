@@ -5,7 +5,10 @@ import string
 from json import JSONEncoder, loads
 
 import pluggy
+import requests
 from dotenv import dotenv_values
+from dxf import DXF
+from dxf.exceptions import DXFUnauthorizedError
 from kubernetes import client, config, watch
 from rich.progress import Progress
 
@@ -22,6 +25,59 @@ def load_env():
     env = dotenv_values(".env.q8s")
 
     return env
+
+
+class ContainerImageValidator:
+    @staticmethod
+    def validate(image: str, registry_pat: str | None = None) -> bool:
+        if not image:
+            raise ValueError("Container image must be a non-empty string")
+
+        segments = image.split("/")
+        if len(segments) < 2:
+            raise ValueError(f"Invalid container image reference: {image}")
+
+        if len(segments) == 3:
+            registry_host = segments[0]
+            repo_part = "/".join(segments[1:])
+            username = segments[1]
+        else:
+            registry_host = "registry-1.docker.io"
+            repo_part = "/".join(segments)
+            username = segments[0]
+
+        if ":" in repo_part:
+            repository, tag = repo_part.split(":", 1)
+        else:
+            repository, tag = repo_part, "latest"
+
+        try:
+            dxf = DXF(registry_host, repo=repository)
+
+            if registry_pat:
+                dxf.authenticate(
+                    username=username,
+                    password=registry_pat,
+                    actions=["pull"],
+                )
+
+            dxf.get_alias(tag)
+
+        except DXFUnauthorizedError:
+            raise ValueError(f"Container image '{image}' requires authentication")
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 403:
+                raise ValueError(
+                    f"Container image '{image}' requires authentication; registry PAT is invalid"
+                )
+            elif e.response.status_code == 404:
+                raise ValueError(f"Container image '{image}' not found")
+            else:
+                raise ValueError(
+                    f"Error validating container image '{image}': {e.reason}"
+                )
+
+        return True
 
 
 class K8sContext:
@@ -74,6 +130,8 @@ class K8sContext:
         return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
 
     def set_container_image(self, image: str):
+        ContainerImageValidator.validate(image, self.registry_pat)
+
         self.container_image = image
 
     def set_registry_pat(self, pat: str):
