@@ -72,7 +72,7 @@ class TestContainerImageValidator(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             ContainerImageValidator.validate("user/repo:tag", registry_pat="badpat")
 
-        self.assertIn("registry PAT is invalid", str(ctx.exception))
+        self.assertIn("invalid registry PAT", str(ctx.exception))
 
     @patch("q8s.execution.DXF")
     def test_validate_http_404_not_found(self, MockDXF):
