@@ -7,6 +7,11 @@ from dxf.exceptions import DXFUnauthorizedError
 from q8s.execution import ContainerImageValidator
 
 
+class MockResponse:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+
 class TestContainerImageValidator(unittest.TestCase):
 
     @patch("q8s.execution.DXF")
@@ -61,11 +66,7 @@ class TestContainerImageValidator(unittest.TestCase):
 
         http_error = requests.exceptions.HTTPError()
 
-        class Response:
-            def __init__(self, status_code):
-                self.status_code = status_code
-
-        http_error.response = Response(403)
+        http_error.response = MockResponse(403)
         instance.get_alias.side_effect = http_error
 
         with self.assertRaises(ValueError) as ctx:
@@ -79,11 +80,7 @@ class TestContainerImageValidator(unittest.TestCase):
 
         http_error = requests.exceptions.HTTPError()
 
-        class Response:
-            def __init__(self, status_code):
-                self.status_code = status_code
-
-        http_error.response = Response(404)
+        http_error.response = MockResponse(404)
         instance.get_alias.side_effect = http_error
 
         with self.assertRaises(ValueError) as ctx:
@@ -97,8 +94,9 @@ class TestContainerImageValidator(unittest.TestCase):
 
     @patch("q8s.execution.DXF")
     def test_validate_invalid_reference_raises(self, MockDXF):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as ctx:
             ContainerImageValidator.validate("invalidimage")
+            self.assertIn("Invalid container image reference", str(ctx.exception))
 
 
 if __name__ == "__main__":

@@ -28,6 +28,20 @@ def load_env():
 
 
 class ContainerImageValidator:
+    """
+    Validate that a container image exists in its registry.
+
+    Args:
+        image: Container image reference (e.g., 'user/repo:tag' or 'registry.com/user/repo:tag')
+        registry_pat: Optional personal access token for registry authentication
+
+    Returns:
+        True if the image exists and is accessible
+
+    Raises:
+        ValueError: If the image is invalid, not found, or authentication fails
+    """
+
     @staticmethod
     def validate(image: str, registry_pat: str | None = None) -> bool:
         if not image:
@@ -66,16 +80,14 @@ class ContainerImageValidator:
         except DXFUnauthorizedError:
             raise ValueError(f"Container image '{image}' requires authentication")
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 403:
-                raise ValueError(
-                    f"Container image '{image}' requires authentication; registry PAT is invalid"
-                )
-            elif e.response.status_code == 404:
-                raise ValueError(f"Container image '{image}' not found")
-            else:
-                raise ValueError(
-                    f"Error validating container image '{image}': {e.reason}"
-                )
+            if e.response is not None and hasattr(e.response, "status_code"):
+                if e.response.status_code == 403:
+                    raise ValueError(
+                        f"Container image '{image}' requires authentication; invalid registry PAT"
+                    )
+                elif e.response.status_code == 404:
+                    raise ValueError(f"Container image '{image}' not found")
+            raise ValueError(f"Error validating container image '{image}': {str(e)}")
 
         return True
 
