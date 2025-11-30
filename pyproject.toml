@@ -27,6 +27,7 @@ dependencies = [
   "pyyaml==6.0.2",
   "typer>=0.15.4",
   "GitPython>=3.1.43",
+  "python-dxf>=12.1.1",
 ]
 requires-python = ">= 3.10"
 

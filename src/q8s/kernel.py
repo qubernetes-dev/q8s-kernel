@@ -58,8 +58,8 @@ class Q8sKernel(Kernel):
                 expand=True,
             ),
         )
-        self.k8s_context.set_container_image(self.docker_image)
         self.k8s_context.set_registry_pat(os.environ.get("REGISTRY_PAT", None))
+        self.k8s_context.set_container_image(self.docker_image)
 
         logging.info("q8s kernel started")
         logging.info(f"docker image: {self.docker_image}")
