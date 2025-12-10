@@ -20,7 +20,7 @@ classifiers = [
 dependencies = [
   "dacite==1.9.2",
   "ipykernel==6.26.0",
-  "kubernetes==29.0.0",
+  "kubernetes==34.1.0",
   "matplotlib==3.10.1",
   "pluggy==1.5.0",
   "python-dotenv==1.0.1",
