@@ -149,19 +149,32 @@ class Workload:
         if root is None:
             return False
 
-        cfg_path = root / "setup.cfg"
-        if not cfg_path.exists():
-            return False
+        cfg_path = root / "config.cfg"
+        if cfg_path.exists():
 
-        config = configparser.ConfigParser()
-        config.read(cfg_path)
+            config = configparser.ConfigParser()
+            config.read(cfg_path)
 
-        # Very simple heuristic: [options.packages.find] where = src
-        if config.has_section("options.packages.find"):
-            where = config.get("options.packages.find", "where", fallback="").strip()
-            if where == "src":
-                self.__pyproject_root = root
-                return True
+            # Very simple heuristic: [options.packages.find] where = src
+            if config.has_section("options.packages.find"):
+                where = config.get(
+                    "options.packages.find", "where", fallback=""
+                ).strip()
+                if where == "src":
+                    self.__pyproject_root = root
+                    return True
 
-        # You could add similar checks for pyproject.toml if you use that
+        pyproject_path = root / "pyproject.toml"
+        if pyproject_path.exists():
+            config = configparser.ConfigParser()
+            config.read(pyproject_path)
+
+            if config.has_section("tool.setuptools.packages.find"):
+                where = config.get(
+                    "tool.setuptools.packages.find", "where", fallback=""
+                ).strip()
+                if where == '["src"]':
+                    self.__pyproject_root = root
+                    return True
+
         return False
