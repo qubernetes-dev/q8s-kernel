@@ -23,7 +23,7 @@ class TestWorkloadSrcLayoutDetection(unittest.TestCase):
         (self._tmpdir / "setup.cfg").write_text("", encoding="utf-8")
         write(
             self._tmpdir,
-            "config.cfg",
+            "setup.cfg",
             """
             [options.packages.find]
             where = src

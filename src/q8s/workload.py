@@ -2,6 +2,11 @@ import configparser
 import os
 from pathlib import Path
 
+try:  # Python 3.11+
+    import tomllib  # type: ignore[import]
+except ModuleNotFoundError:  # pragma: no cover
+    from pip._vendor import tomli as tomllib  # type: ignore[attr-defined]
+
 from .multifiles import collect_imported_files
 
 
@@ -149,7 +154,7 @@ class Workload:
         if root is None:
             return False
 
-        cfg_path = root / "config.cfg"
+        cfg_path = root / "setup.cfg"
         if cfg_path.exists():
 
             config = configparser.ConfigParser()
@@ -166,15 +171,22 @@ class Workload:
 
         pyproject_path = root / "pyproject.toml"
         if pyproject_path.exists():
-            config = configparser.ConfigParser()
-            config.read(pyproject_path)
+            try:
+                with pyproject_path.open("rb") as f:
+                    pyproject_data = tomllib.load(f)
+            except Exception:
+                pyproject_data = {}
 
-            if config.has_section("tool.setuptools.packages.find"):
-                where = config.get(
-                    "tool.setuptools.packages.find", "where", fallback=""
-                ).strip()
-                if where == '["src"]':
-                    self.__pyproject_root = root
-                    return True
+            where = (
+                pyproject_data.get("tool", {})
+                .get("setuptools", {})
+                .get("packages", {})
+                .get("find", {})
+                .get("where")
+            )
+
+            if isinstance(where, list) and "src" in where:
+                self.__pyproject_root = root
+                return True
 
         return False
