@@ -2,6 +2,11 @@ import configparser
 import os
 from pathlib import Path
 
+try:  # Python 3.11+
+    import tomllib  # type: ignore[import]
+except ModuleNotFoundError:  # pragma: no cover
+    from pip._vendor import tomli as tomllib  # type: ignore[attr-defined]
+
 from .multifiles import collect_imported_files
 
 
@@ -150,18 +155,38 @@ class Workload:
             return False
 
         cfg_path = root / "setup.cfg"
-        if not cfg_path.exists():
-            return False
+        if cfg_path.exists():
 
-        config = configparser.ConfigParser()
-        config.read(cfg_path)
+            config = configparser.ConfigParser()
+            config.read(cfg_path)
 
-        # Very simple heuristic: [options.packages.find] where = src
-        if config.has_section("options.packages.find"):
-            where = config.get("options.packages.find", "where", fallback="").strip()
-            if where == "src":
+            # Very simple heuristic: [options.packages.find] where = src
+            if config.has_section("options.packages.find"):
+                where = config.get(
+                    "options.packages.find", "where", fallback=""
+                ).strip()
+                if where == "src":
+                    self.__pyproject_root = root
+                    return True
+
+        pyproject_path = root / "pyproject.toml"
+        if pyproject_path.exists():
+            try:
+                with pyproject_path.open("rb") as f:
+                    pyproject_data = tomllib.load(f)
+            except Exception:
+                pyproject_data = {}
+
+            where = (
+                pyproject_data.get("tool", {})
+                .get("setuptools", {})
+                .get("packages", {})
+                .get("find", {})
+                .get("where")
+            )
+
+            if isinstance(where, list) and "src" in where:
                 self.__pyproject_root = root
                 return True
 
-        # You could add similar checks for pyproject.toml if you use that
         return False

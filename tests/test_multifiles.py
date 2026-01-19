@@ -1,17 +1,10 @@
 import shutil
 import tempfile
-import textwrap
 import unittest
 from pathlib import Path
 
 from q8s.multifiles import _iter_imports
-
-
-def write(tmpdir: Path, rel: str, content: str) -> Path:
-    p = tmpdir / rel
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(textwrap.dedent(content), encoding="utf-8")
-    return p
+from tests.utils import write
 
 
 class TestIterImports(unittest.TestCase):
