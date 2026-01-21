@@ -191,7 +191,13 @@ class K8sContext:
         )
 
         # Create the specification of deployment
-        spec = client.V1JobSpec(template=template)  # , ttl_seconds_after_finished=10
+        spec = client.V1JobSpec(
+            template=template,
+            # cleanup job and associate resources
+            ttl_seconds_after_finished=10,
+            # do not retry failed jobs
+            backoff_limit=0,
+        )
 
         # Instantiate the job object
         job_spec = client.V1Job(
@@ -212,12 +218,11 @@ class K8sContext:
 
         self.__create_config_map_object_from_workload(job, workload=workload)
         self.__progress.console.print("Application code attached")
-        self.__create_environment_secret()
+        self.__create_environment_secret(job)
         self.__progress.console.print("Environment variables created")
 
         if self.registry_pat:
-            self.__create_registry_credentials_secret()
-
+            self.__create_registry_credentials_secret(job)
         self.__progress.advance(prepare_task, 1)
         return job
 
@@ -252,7 +257,7 @@ class K8sContext:
             namespace=self.namespace, body=configmap
         )
 
-    def __create_environment_secret(self):
+    def __create_environment_secret(self, job: client.V1Job):
         """
         Create a Secret object with the environment variables.
         """
@@ -270,16 +275,16 @@ class K8sContext:
             metadata=client.V1ObjectMeta(
                 name=self.name,
                 namespace=self.namespace,
-                # owner_references=[
-                #     client.V1OwnerReference(
-                #         api_version="v1",
-                #         kind="Job",
-                #         name=job.metadata.name,
-                #         uid=job.metadata.uid,
-                #         # block_owner_deletion=True,
-                #         # controller=True,
-                #     )
-                # ],
+                owner_references=[
+                    client.V1OwnerReference(
+                        api_version="batch/v1",
+                        kind="Job",
+                        name=job.metadata.name,
+                        uid=job.metadata.uid,
+                        # block_owner_deletion=True,
+                        # controller=True,
+                    )
+                ],
             ),
         )
 
@@ -287,7 +292,7 @@ class K8sContext:
             namespace=self.namespace, body=secret
         )
 
-    def __create_registry_credentials_secret(self):
+    def __create_registry_credentials_secret(self, job: client.V1Job):
         """
         Create a Secret object with the registry credentials.
         """
@@ -314,6 +319,16 @@ class K8sContext:
             metadata=client.V1ObjectMeta(
                 name=self.__registry_credentials_secret_name(),
                 namespace=self.namespace,
+                owner_references=[
+                    client.V1OwnerReference(
+                        api_version="batch/v1",
+                        kind="Job",
+                        name=job.metadata.name,
+                        uid=job.metadata.uid,
+                        # block_owner_deletion=True,
+                        # controller=True,
+                    )
+                ],
             ),
             data={
                 ".dockerconfigjson": base64.b64encode(
@@ -411,20 +426,24 @@ class K8sContext:
 
                 # Job execution completed
                 if event["object"].status.active is None:
+                    print(event["object"].status.conditions)
+
                     # Failed
-                    if event["object"].status.conditions is None:
+                    if event["object"].status.conditions[-1].type == "Failed":
                         message = "Failed"
                         color = "red"
                         w.stop()
                         result = "stderr"
 
                     # Succeeded
-                    else:
+                    elif event["object"].status.conditions[-1].type == "Complete":
                         message = event["object"].status.conditions[-1].type
                         color = "green"
+                        w.stop()
 
-                        if event["object"].status.conditions[-1].type == "Complete":
-                            w.stop()
+                    else:
+                        pass
+
                 # Job schedukled
                 elif event["type"] == "ADDED":
                     message = "Scheduled"
@@ -489,7 +508,7 @@ class K8sContext:
         except Exception:
             return "An error occurred.", "stderr"
         finally:
-            self.__delete_job()
+            # self.__delete_job()
             pass
 
     def abort(self):
