@@ -115,6 +115,9 @@ def execute(
             envvar="REGISTRY_PAT",
         ),
     ] = None,
+    submit: Annotated[
+        bool, typer.Option(help="Submit job and exit without waiting for completion")
+    ] = False,
     args: Annotated[list[str], typer.Argument(help="Additional arguments")] = None,
 ):
     project = Project()
@@ -147,7 +150,9 @@ def execute(
         workload = Workload.from_entry_script(entry_script=file)
         workload.set_args(args or [])
 
-        output, stream_name = k8s_context.execute_workload(workload=workload)
+        output, stream_name = k8s_context.execute_workload(
+            workload=workload, submit=submit
+        )
 
         print(f"output:\n{output}")
         print(f"output stream: {stream_name}")

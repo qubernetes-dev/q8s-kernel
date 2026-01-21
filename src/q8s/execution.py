@@ -10,7 +10,7 @@ from dotenv import dotenv_values
 from dxf import DXF
 from dxf.exceptions import DXFUnauthorizedError
 from kubernetes import client, config, watch
-from rich.progress import Progress
+from rich.progress import Progress, TaskID
 
 from q8s.enums import Target
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin
@@ -407,13 +407,11 @@ class K8sContext:
 
         return pod_name
 
-    def __complete_and_get_job_status(self):
+    def __complete_and_get_job_status(self, execute_task: TaskID):
         """
         Wait for the job to complete and get its status.
         """
         result = "stdout"
-
-        execute_task = self.__progress.add_task("[cyan]Executing job...", total=1)
 
         w = watch.Watch()
 
@@ -485,7 +483,9 @@ class K8sContext:
 
         return env
 
-    def execute_workload(self, workload: Workload) -> tuple[str, str]:
+    def execute_workload(
+        self, workload: Workload, submit: bool = False
+    ) -> tuple[str, str]:
         """
         Execute the given workload.
         """
@@ -493,16 +493,28 @@ class K8sContext:
         try:
             self.__create_job_object_from_workload(workload=workload)
 
-            if self.jupyter_logger is not None:
-                self.jupyter_logger(f"Job {self.name} created")
+            execute_task = self.__progress.add_task("[cyan]Executing job...", total=1)
 
-            stream = self.__complete_and_get_job_status()
+            if submit is False:
+                if self.jupyter_logger is not None:
+                    self.jupyter_logger(f"Job {self.name} created")
 
-            job = self.__get_pods_in_job()
-            logs = self.__get_job_logs(job)
-            self.__progress.console.print("Fetched job logs")
+                stream = self.__complete_and_get_job_status(execute_task=execute_task)
 
-            return logs, stream
+                job = self.__get_pods_in_job()
+                logs = self.__get_job_logs(job)
+                self.__progress.console.print("Fetched job logs")
+
+                return logs, stream
+            else:
+                self.__progress.update(
+                    execute_task,
+                    description=f"[cyan]Executing job... [orange3]Queued {self.name}",
+                )
+
+                self.__progress.advance(execute_task, 1)
+
+                return f"Job {self.name} submitted successfully.", "stdout"
         except KeyboardInterrupt:
             return "Task interrupted by user", "stderr"
         except Exception:
