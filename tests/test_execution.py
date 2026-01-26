@@ -1,10 +1,11 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import requests
 from dxf.exceptions import DXFUnauthorizedError
 
-from q8s.execution import ContainerImageValidator
+from q8s.execution import ContainerImageValidator, K8sContext
+from q8s.workload import Workload
 
 
 class MockResponse:
@@ -97,6 +98,79 @@ class TestContainerImageValidator(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             ContainerImageValidator.validate("invalidimage")
             self.assertIn("Invalid container image reference", str(ctx.exception))
+
+
+class TestK8sContextExecuteWorkload(unittest.TestCase):
+    def _make_context(self):
+        ctx = K8sContext.__new__(K8sContext)
+        progress = Mock()
+        progress.console = Mock()
+        progress.add_task.return_value = "task-id"
+        ctx._K8sContext__progress = progress
+        ctx.jupyter_logger = Mock()
+        ctx.name = "qubernetes-job-test"
+        return ctx, progress
+
+    def test_execute_workload_submit_false_returns_logs(self):
+        ctx, progress = self._make_context()
+        ctx._K8sContext__create_job_object_from_workload = Mock()
+        ctx._K8sContext__complete_and_get_job_status = Mock(return_value="stdout")
+        ctx._K8sContext__get_pods_in_job = Mock(return_value="pod-1")
+        ctx._K8sContext__get_job_logs = Mock(return_value="log output")
+
+        workload = Workload.from_code("print('hi')")
+        result = ctx.execute_workload(workload, submit=False)
+
+        self.assertEqual(result, ("log output", "stdout"))
+        ctx._K8sContext__create_job_object_from_workload.assert_called_once_with(
+            workload=workload
+        )
+        ctx._K8sContext__complete_and_get_job_status.assert_called_once_with(
+            execute_task="task-id"
+        )
+        ctx._K8sContext__get_job_logs.assert_called_once_with("pod-1")
+        progress.console.print.assert_called_once_with("Fetched job logs")
+
+    def test_execute_workload_submit_true_skips_wait(self):
+        ctx, progress = self._make_context()
+        ctx._K8sContext__create_job_object_from_workload = Mock()
+        ctx._K8sContext__complete_and_get_job_status = Mock()
+
+        workload = Workload.from_code("print('hi')")
+        result = ctx.execute_workload(workload, submit=True)
+
+        self.assertEqual(
+            result, ("Job qubernetes-job-test submitted successfully.", "stdout")
+        )
+        ctx._K8sContext__complete_and_get_job_status.assert_not_called()
+        progress.update.assert_called_once()
+        progress.advance.assert_called_once_with("task-id", 1)
+
+    def test_execute_workload_keyboard_interrupt_aborts(self):
+        ctx, _ = self._make_context()
+        ctx._K8sContext__create_job_object_from_workload = Mock(
+            side_effect=KeyboardInterrupt
+        )
+        ctx.abort = Mock()
+
+        workload = Workload.from_code("print('hi')")
+        result = ctx.execute_workload(workload, submit=False)
+
+        self.assertEqual(result, ("Task interrupted by user", "stderr"))
+        ctx.abort.assert_called_once()
+
+    def test_execute_workload_exception_returns_error(self):
+        ctx, _ = self._make_context()
+        ctx._K8sContext__create_job_object_from_workload = Mock(
+            side_effect=Exception("boom")
+        )
+        ctx.abort = Mock()
+
+        workload = Workload.from_code("print('hi')")
+        result = ctx.execute_workload(workload, submit=False)
+
+        self.assertEqual(result, ("An error occurred.", "stderr"))
+        ctx.abort.assert_not_called()
 
 
 if __name__ == "__main__":

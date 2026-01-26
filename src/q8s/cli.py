@@ -208,5 +208,5 @@ def jupyter(
         raise typer.Exit(code=1)
 
 
-# if __name__ == "__main__":
-app()
+if __name__ == "__main__":
+    app()
