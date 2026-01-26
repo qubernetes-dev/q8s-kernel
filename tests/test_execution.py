@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import requests
@@ -11,6 +12,21 @@ from q8s.workload import Workload
 class MockResponse:
     def __init__(self, status_code):
         self.status_code = status_code
+
+
+class DummyWatch:
+    def __init__(self, events):
+        self.events = events
+        self.stopped = False
+
+    def stream(self, *args, **kwargs):
+        for event in self.events:
+            if self.stopped:
+                break
+            yield event
+
+    def stop(self):
+        self.stopped = True
 
 
 class TestContainerImageValidator(unittest.TestCase):
@@ -171,6 +187,79 @@ class TestK8sContextExecuteWorkload(unittest.TestCase):
 
         self.assertEqual(result, ("An error occurred.", "stderr"))
         ctx.abort.assert_not_called()
+
+
+class TestK8sContextCompleteJobStatus(unittest.TestCase):
+    def _make_context(self):
+        ctx = K8sContext.__new__(K8sContext)
+        progress = Mock()
+        progress.console = Mock()
+        ctx._K8sContext__progress = progress
+        ctx.jupyter_logger = None
+        ctx.name = "qubernetes-job-test"
+        ctx.namespace = "default"
+        ctx.batch_api_instance = Mock()
+        return ctx, progress
+
+    def _make_event(self, name, active, condition_type, event_type="MODIFIED"):
+        conditions = []
+        if condition_type is not None:
+            conditions = [SimpleNamespace(type=condition_type)]
+        obj = SimpleNamespace(
+            metadata=SimpleNamespace(name=name),
+            status=SimpleNamespace(active=active, conditions=conditions),
+        )
+        return {"object": obj, "type": event_type}
+
+    def test_complete_and_get_job_status_failed_returns_stderr(self):
+        ctx, progress = self._make_context()
+        event = self._make_event(ctx.name, None, "Failed")
+        dummy_watch = DummyWatch([event])
+
+        with patch("q8s.execution.watch.Watch", return_value=dummy_watch):
+            result = ctx._K8sContext__complete_and_get_job_status(
+                execute_task="task-id"
+            )
+
+        self.assertEqual(result, "stderr")
+        self.assertTrue(dummy_watch.stopped)
+        progress.update.assert_called_once()
+        self.assertIn("Failed", progress.update.call_args.kwargs["description"])
+        progress.advance.assert_called_once_with("task-id", 1)
+
+    def test_complete_and_get_job_status_complete_returns_stdout(self):
+        ctx, progress = self._make_context()
+        event = self._make_event(ctx.name, None, "Complete")
+        dummy_watch = DummyWatch([event])
+
+        with patch("q8s.execution.watch.Watch", return_value=dummy_watch):
+            result = ctx._K8sContext__complete_and_get_job_status(
+                execute_task="task-id"
+            )
+
+        self.assertEqual(result, "stdout")
+        self.assertTrue(dummy_watch.stopped)
+        progress.update.assert_called_once()
+        self.assertIn("Complete", progress.update.call_args.kwargs["description"])
+        progress.advance.assert_called_once_with("task-id", 1)
+
+    def test_complete_and_get_job_status_running_keeps_stdout(self):
+        ctx, progress = self._make_context()
+        events = [
+            self._make_event(ctx.name, 1, None, event_type="ADDED"),
+            self._make_event(ctx.name, 1, None, event_type="MODIFIED"),
+        ]
+        dummy_watch = DummyWatch(events)
+
+        with patch("q8s.execution.watch.Watch", return_value=dummy_watch):
+            result = ctx._K8sContext__complete_and_get_job_status(
+                execute_task="task-id"
+            )
+
+        self.assertEqual(result, "stdout")
+        self.assertFalse(dummy_watch.stopped)
+        self.assertEqual(progress.update.call_count, 2)
+        progress.advance.assert_called_once_with("task-id", 1)
 
 
 if __name__ == "__main__":
