@@ -210,6 +210,7 @@ class K8sContext:
                 namespace=self.namespace,
                 labels={
                     # "qubernetes.dev/job.type": "jupyter",
+                    "qubernetes.dev/created.by": "q8sctl",
                     "qubernetes.dev/project.name": self.project.name,
                 },
             ),
