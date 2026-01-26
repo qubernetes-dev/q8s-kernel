@@ -10,7 +10,7 @@ from dotenv import dotenv_values
 from dxf import DXF
 from dxf.exceptions import DXFUnauthorizedError
 from kubernetes import client, config, watch
-from rich.progress import Progress
+from rich.progress import Progress, TaskID
 
 from q8s.enums import Target
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin
@@ -191,7 +191,13 @@ class K8sContext:
         )
 
         # Create the specification of deployment
-        spec = client.V1JobSpec(template=template)  # , ttl_seconds_after_finished=10
+        spec = client.V1JobSpec(
+            template=template,
+            # cleanup job and associate resources
+            ttl_seconds_after_finished=10,
+            # do not retry failed jobs
+            backoff_limit=0,
+        )
 
         # Instantiate the job object
         job_spec = client.V1Job(
@@ -212,12 +218,11 @@ class K8sContext:
 
         self.__create_config_map_object_from_workload(job, workload=workload)
         self.__progress.console.print("Application code attached")
-        self.__create_environment_secret()
+        self.__create_environment_secret(job)
         self.__progress.console.print("Environment variables created")
 
         if self.registry_pat:
-            self.__create_registry_credentials_secret()
-
+            self.__create_registry_credentials_secret(job)
         self.__progress.advance(prepare_task, 1)
         return job
 
@@ -252,7 +257,7 @@ class K8sContext:
             namespace=self.namespace, body=configmap
         )
 
-    def __create_environment_secret(self):
+    def __create_environment_secret(self, job: client.V1Job):
         """
         Create a Secret object with the environment variables.
         """
@@ -270,16 +275,16 @@ class K8sContext:
             metadata=client.V1ObjectMeta(
                 name=self.name,
                 namespace=self.namespace,
-                # owner_references=[
-                #     client.V1OwnerReference(
-                #         api_version="v1",
-                #         kind="Job",
-                #         name=job.metadata.name,
-                #         uid=job.metadata.uid,
-                #         # block_owner_deletion=True,
-                #         # controller=True,
-                #     )
-                # ],
+                owner_references=[
+                    client.V1OwnerReference(
+                        api_version="batch/v1",
+                        kind="Job",
+                        name=job.metadata.name,
+                        uid=job.metadata.uid,
+                        # block_owner_deletion=True,
+                        # controller=True,
+                    )
+                ],
             ),
         )
 
@@ -287,7 +292,7 @@ class K8sContext:
             namespace=self.namespace, body=secret
         )
 
-    def __create_registry_credentials_secret(self):
+    def __create_registry_credentials_secret(self, job: client.V1Job):
         """
         Create a Secret object with the registry credentials.
         """
@@ -314,6 +319,16 @@ class K8sContext:
             metadata=client.V1ObjectMeta(
                 name=self.__registry_credentials_secret_name(),
                 namespace=self.namespace,
+                owner_references=[
+                    client.V1OwnerReference(
+                        api_version="batch/v1",
+                        kind="Job",
+                        name=job.metadata.name,
+                        uid=job.metadata.uid,
+                        # block_owner_deletion=True,
+                        # controller=True,
+                    )
+                ],
             ),
             data={
                 ".dockerconfigjson": base64.b64encode(
@@ -392,13 +407,11 @@ class K8sContext:
 
         return pod_name
 
-    def __complete_and_get_job_status(self):
+    def __complete_and_get_job_status(self, execute_task: TaskID):
         """
         Wait for the job to complete and get its status.
         """
         result = "stdout"
-
-        execute_task = self.__progress.add_task("[cyan]Executing job...", total=1)
 
         w = watch.Watch()
 
@@ -411,20 +424,24 @@ class K8sContext:
 
                 # Job execution completed
                 if event["object"].status.active is None:
+                    print(event["object"].status.conditions)
+
                     # Failed
-                    if event["object"].status.conditions is None:
+                    if event["object"].status.conditions[-1].type == "Failed":
                         message = "Failed"
                         color = "red"
                         w.stop()
                         result = "stderr"
 
                     # Succeeded
-                    else:
+                    elif event["object"].status.conditions[-1].type == "Complete":
                         message = event["object"].status.conditions[-1].type
                         color = "green"
+                        w.stop()
 
-                        if event["object"].status.conditions[-1].type == "Complete":
-                            w.stop()
+                    else:
+                        pass
+
                 # Job schedukled
                 elif event["type"] == "ADDED":
                     message = "Scheduled"
@@ -466,7 +483,9 @@ class K8sContext:
 
         return env
 
-    def execute_workload(self, workload: Workload) -> tuple[str, str]:
+    def execute_workload(
+        self, workload: Workload, submit: bool = False
+    ) -> tuple[str, str]:
         """
         Execute the given workload.
         """
@@ -474,22 +493,35 @@ class K8sContext:
         try:
             self.__create_job_object_from_workload(workload=workload)
 
-            if self.jupyter_logger is not None:
-                self.jupyter_logger(f"Job {self.name} created")
+            execute_task = self.__progress.add_task("[cyan]Executing job...", total=1)
 
-            stream = self.__complete_and_get_job_status()
+            if submit is False:
+                if self.jupyter_logger is not None:
+                    self.jupyter_logger(f"Job {self.name} created")
 
-            job = self.__get_pods_in_job()
-            logs = self.__get_job_logs(job)
-            self.__progress.console.print("Fetched job logs")
+                stream = self.__complete_and_get_job_status(execute_task=execute_task)
 
-            return logs, stream
+                job = self.__get_pods_in_job()
+                logs = self.__get_job_logs(job)
+                self.__progress.console.print("Fetched job logs")
+
+                return logs, stream
+            else:
+                self.__progress.update(
+                    execute_task,
+                    description=f"[cyan]Executing job... [orange3]Queued {self.name}",
+                )
+
+                self.__progress.advance(execute_task, 1)
+
+                return f"Job {self.name} submitted successfully.", "stdout"
         except KeyboardInterrupt:
+            self.abort()
             return "Task interrupted by user", "stderr"
         except Exception:
             return "An error occurred.", "stderr"
         finally:
-            self.__delete_job()
+            # self.__delete_job()
             pass
 
     def abort(self):
