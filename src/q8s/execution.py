@@ -516,7 +516,7 @@ class K8sContext:
 
                 return f"Job {self.name} submitted successfully.", "stdout"
         except KeyboardInterrupt:
-            self.__delete_job()
+            self.abort()
             return "Task interrupted by user", "stderr"
         except Exception:
             return "An error occurred.", "stderr"
