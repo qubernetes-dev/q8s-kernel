@@ -3,6 +3,7 @@ import os
 from kubernetes import client
 
 from q8s.plugins.utils.git_info import get_git_info
+from q8s.project import Project
 
 
 class JobPlugin:
@@ -17,6 +18,21 @@ class JobPlugin:
         - Q8S_GIT_REPO_URL, MLFLOW_GIT_REPO_URL: The remote repository URL.
         - GIT_PYTHON_REFRESH: Set to "quiet" to suppress GitPython refresh warnings.
     """
+
+    def patch_environment(self, env: list[client.V1EnvVar]) -> list[client.V1EnvVar]:
+        """
+        Patch environment variables for the job with Git and Project information
+
+        Args:
+            env (list[client.V1EnvVar]): Original environment variables
+        Returns:
+            list[client.V1EnvVar]: Patched environment variables
+        """
+
+        env = self.patch_environment_with_git_info(env)
+        env = self.patch_environment_with_project_info(env)
+
+        return env
 
     def patch_environment_with_git_info(
         self, env: list[client.V1EnvVar]
@@ -50,5 +66,23 @@ class JobPlugin:
             )
 
         env.append(client.V1EnvVar(name="GIT_PYTHON_REFRESH", value="quiet"))
+
+        return env
+
+    def patch_environment_with_project_info(
+        self, env: list[client.V1EnvVar]
+    ) -> list[client.V1EnvVar]:
+        """
+        Patch environment variables for the job with Project information
+
+        Args:
+            env (list[client.V1EnvVar]): Original environment variables
+        Returns:
+            list[client.V1EnvVar]: Patched environment variables
+        """
+
+        project = Project()
+
+        env.append(client.V1EnvVar(name="Q8S_PROJECT_NAME", value=project.name))
 
         return env

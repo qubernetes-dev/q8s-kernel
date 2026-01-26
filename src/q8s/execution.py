@@ -16,6 +16,7 @@ from q8s.enums import Target
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin
 from q8s.plugins.cuda_job import CUDAJobTemplatePlugin
 from q8s.plugins.job_template_spec import JobTemplatePluginSpec
+from q8s.project import Project
 from q8s.utils import extract_non_none_value
 
 from .workload import Workload
@@ -140,6 +141,7 @@ class K8sContext:
         self.__env = load_env()
 
         self.jupyter_logger = logger
+        self.project = Project()
 
     @staticmethod
     def get_id():
@@ -206,7 +208,10 @@ class K8sContext:
             metadata=client.V1ObjectMeta(
                 name=self.name,
                 namespace=self.namespace,
-                labels={"qubernetes.dev/job.type": "jupyter"},
+                labels={
+                    # "qubernetes.dev/job.type": "jupyter",
+                    "qubernetes.dev/project.name": self.project.name,
+                },
             ),
             spec=spec,
         )

@@ -27,10 +27,11 @@ class CPUJobTemplatePlugin(JobPlugin):
         volume_name = f"app-volume-{name}"
 
         env_var = list(env)
+
         if workload.is_src_project:
             env_var.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
 
-        self.patch_environment_with_git_info(env_var)
+        env_var = self.patch_environment(env_var)
 
         container = client.V1Container(
             name="quantum-routine",
