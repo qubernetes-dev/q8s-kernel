@@ -136,8 +136,6 @@ class K8sContext:
         self.core_api_instance = client.CoreV1Api()
         self.batch_api_instance = client.BatchV1Api()
 
-        self.name = f"qubernetes-job-{K8sContext.get_id()}"
-
         self.__env = load_env()
 
         self.jupyter_logger = logger
@@ -495,6 +493,8 @@ class K8sContext:
         """
         Execute the given workload.
         """
+
+        self.name = f"qubernetes-job-{K8sContext.get_id()}"
 
         try:
             self.__create_job_object_from_workload(workload=workload)

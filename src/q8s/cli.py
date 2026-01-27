@@ -1,9 +1,13 @@
+import base64
 import importlib
+import os
 import sys
 from pathlib import Path
 from subprocess import Popen
 
+import hydra
 import typer
+from omegaconf import DictConfig, OmegaConf
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from typing_extensions import Annotated
 
@@ -91,6 +95,105 @@ def build(
 
     print(f"Project {project.name} ready")
     project.update_images_cache()
+
+
+def _multirun_with_cfg(
+    *,
+    cfg: DictConfig,
+    k8sctx: K8sContext,
+    workload: Workload,
+    script_args: list[str],
+) -> None:
+    cfg_str = OmegaConf.to_yaml(cfg=cfg, resolve=True)
+    b64_cfg = base64.b64encode(cfg_str.encode("utf-8")).decode("ascii")
+    workload.set_args([b64_cfg])
+
+    k8sctx.execute_workload(workload=workload, submit=True)
+
+
+@app.command(
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+    }
+)
+def multirun(
+    file: Annotated[Path, typer.Argument(help="Python file to be executed")],
+    config: Annotated[Path, typer.Option(help="Hydra config file")] = None,
+    target: Annotated[
+        Target, typer.Option(help="Execution target", case_sensitive=False)
+    ] = Target.gpu,
+    kubeconfig: Annotated[
+        Path, typer.Option(help="Kubernetes configuration", envvar="KUBECONFIG")
+    ] = None,
+    image: Annotated[str, typer.Option(help="Docker image")] = None,
+    registry_pat: Annotated[
+        str,
+        typer.Option(
+            help="Registry personal access token (PAT)",
+            envvar="REGISTRY_PAT",
+        ),
+    ] = None,
+    args: Annotated[list[str], typer.Argument(help="Additional arguments")] = None,
+):
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        TimeElapsedColumn(),
+        expand=True,
+    ) as progress:
+        task_project = progress.add_task(
+            description="[cyan]Loading project...", total=1
+        )
+        project = Project()
+        progress.advance(task_project)
+
+        if image is None:
+            image = project.cached_images(target.value)
+
+        if kubeconfig is None:
+            kubeconfig = project.kubeconfig
+
+        if kubeconfig.exists() is False:
+            typer.echo(f"kubeconfig file {kubeconfig} does not exist")
+            raise typer.Exit(code=1)
+
+        if kubeconfig is None:
+            typer.echo("KUBECONFIG not set")
+            raise typer.Exit(code=1)
+
+        k8s_context = K8sContext(kubeconfig.as_posix(), progress=progress)
+        k8s_context.set_target(target)
+        k8s_context.set_registry_pat(registry_pat)
+        k8s_context.set_container_image(image)
+
+        workload = Workload.from_entry_script(entry_script=file)
+
+        @hydra.main(
+            version_base=None,
+            config_path=os.getcwd(),
+            config_name=config.stem,
+        )
+        def _hydra_app(cfg: DictConfig):
+            _multirun_with_cfg(
+                cfg=cfg,
+                k8sctx=k8s_context,
+                workload=workload,
+                script_args=args or [],
+            )
+
+        try:
+            old_argv = sys.argv
+            sys.argv = [
+                "q8sctl",
+                "-m",
+                "hydra.job.chdir=False",
+                "hydra.run.dir=.",
+            ]
+
+            _hydra_app()
+        finally:
+            sys.argv = old_argv
 
 
 @app.command(

@@ -124,7 +124,7 @@ class TestK8sContextExecuteWorkload(unittest.TestCase):
         progress.add_task.return_value = "task-id"
         ctx._K8sContext__progress = progress
         ctx.jupyter_logger = Mock()
-        ctx.name = "qubernetes-job-test"
+        K8sContext.get_id = Mock(return_value="test")
         return ctx, progress
 
     def test_execute_workload_submit_false_returns_logs(self):
