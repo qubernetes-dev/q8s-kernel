@@ -1,7 +1,7 @@
 [project]
 name = "q8s"
-version = "0.13.0"
-description = "Kernel extension for executing quantum programs in simulators on q8s clusters"
+version = "0.14.0-dev1"
+description = "CLI and Jupyter kernel extension for executing quantum programs in simulators on Kubernetes clusters"
 authors = [{ name = "Vlad Stirbu", email = "vstirbu@gmail.com" }]
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -28,6 +28,8 @@ dependencies = [
   "typer>=0.15.4",
   "GitPython>=3.1.43",
   "python-dxf>=12.1.1",
+  "hydra-core>=1.2.0",
+  "omegaconf",
 ]
 requires-python = ">= 3.10"
 

@@ -6,10 +6,12 @@ from kubernetes import client
 from q8s.enums import Target
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin
 from q8s.plugins.cuda_job import CUDAJobTemplatePlugin
+from tests.test_project import mocked_configuration
 
 
 class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
 
+    @unittest.mock.patch("q8s.project.load", return_value=mocked_configuration)
     @patch("q8s.plugins.job_template_spec.client.V1Container")
     @patch("q8s.plugins.job_template_spec.client.V1PodTemplateSpec")
     @patch("q8s.plugins.job_template_spec.client.V1PodSpec")
@@ -30,6 +32,7 @@ class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
         mock_v1_pod_spec,
         mock_v1_pod_template_spec,
         mock_v1_container,
+        mock_load_project,
     ):
         plugin = CPUJobTemplatePlugin()
         name = "test-job"
@@ -64,6 +67,7 @@ class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
         mock_v1_volume.assert_called_once()
         mock_v1_config_map_volume_source.assert_called_once()
 
+    @unittest.mock.patch("q8s.project.load", return_value=mocked_configuration)
     @patch("q8s.plugins.job_template_spec.client.V1Container")
     @patch("q8s.plugins.job_template_spec.client.V1PodTemplateSpec")
     @patch("q8s.plugins.job_template_spec.client.V1PodSpec")
@@ -84,6 +88,7 @@ class TestCPUandGPUJobTemplatePlugin(unittest.TestCase):
         mock_v1_pod_spec,
         mock_v1_pod_template_spec,
         mock_v1_container,
+        mock_load_project,
     ):
         plugin = CUDAJobTemplatePlugin()
         name = "test-job"
