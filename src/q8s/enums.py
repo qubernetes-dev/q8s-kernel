@@ -5,3 +5,4 @@ class Target(str, Enum):
     cpu = "cpu"
     gpu = "gpu"
     qpu = "qpu"
+    hpc = "hpc"

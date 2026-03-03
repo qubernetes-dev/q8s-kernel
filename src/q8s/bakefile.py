@@ -8,6 +8,7 @@ class BakeTargetName(str, Enum):
     cpu = "cpu"
     gpu = "gpu"
     qpu = "qpu"
+    hpc = "hpc"
 
 
 class BuildPlatform(str, Enum):

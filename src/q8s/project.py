@@ -88,6 +88,7 @@ class Q8STargets:
     cpu: Optional[Q8STarget]
     gpu: Optional[Q8STarget]
     qpu: Optional[Q8STarget]
+    hpc: Optional[Q8STarget]
 
     def keys(self):
         return [

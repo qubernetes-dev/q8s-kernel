@@ -15,6 +15,7 @@ from rich.progress import Progress, TaskID
 from q8s.enums import Target
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin
 from q8s.plugins.cuda_job import CUDAJobTemplatePlugin
+from q8s.plugins.hpc_job import HPCJobTemplatePlugin
 from q8s.plugins.job_template_spec import JobTemplatePluginSpec
 from q8s.utils import extract_non_none_value
 
@@ -116,6 +117,7 @@ class K8sContext:
         self.jm.add_hookspecs(JobTemplatePluginSpec)
         self.jm.register(CPUJobTemplatePlugin())
         self.jm.register(CUDAJobTemplatePlugin())
+        self.jm.register(HPCJobTemplatePlugin())
 
         task_config = self.__progress.add_task(
             "[cyan]Loading configuration...", total=1
