@@ -53,12 +53,31 @@ class HPCJobTemplatePlugin(JobPlugin):
             ],
         )
 
+        extra = getattr(workload, "extra", {})
+
+        cpus = extra.get("hpc_cpus", 1)
+        mem = extra.get("hpc_mem", "6G")
+        time = extra.get("hpc_time", "00:04:00")
+
+        flags = [
+            "--account=project_462001257",
+            "--partition=standard",
+            f"--cpus-per-task={cpus}",
+            f"--mem={mem}",
+            f"--time={time}",
+        ]
+
+        annotations = {
+            "slurm-job.vk.io/flags": " ".join(flags)
+        }
+
         template = client.V1PodTemplateSpec(
             metadata=client.V1ObjectMeta(
                 labels={
                     "app": name,
                     "interlink.cern.ch/provider": "remote-hpc",
-                }
+                },
+                annotations=annotations,
             ),
             spec=client.V1PodSpec(
                 containers=[container],
