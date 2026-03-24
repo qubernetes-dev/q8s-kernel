@@ -118,11 +118,13 @@ def execute(
     submit: Annotated[
         bool, typer.Option(help="Submit job and exit without waiting for completion")
     ] = False,
-
-    hpc_cpus: Annotated[int, typer.Option(help="SLURM CPUs per task")] = 1,
-    hpc_mem: Annotated[str, typer.Option(help="SLURM memory (e.g. 16G)")] = "6G",
-    hpc_time: Annotated[str, typer.Option(help="SLURM time (HH:MM:SS)")] = "00:04:00",
-
+    hpc_config: Annotated[
+        Path | None,
+        typer.Option(
+            "--hpc-config",
+            help="Path to HPC config file. If omitted, q8s will look for 'HpcConfig' next to 'Q8Sproject'.",
+        ),
+    ] = None,
     args: Annotated[list[str], typer.Argument(help="Additional arguments")] = None,
 ):
     project = Project()
@@ -155,11 +157,9 @@ def execute(
         workload = Workload.from_entry_script(entry_script=file)
         workload.set_args(args or [])
 
-        workload.extra = {
-            "hpc_cpus": hpc_cpus,
-            "hpc_mem": hpc_mem,
-            "hpc_time": hpc_time,
-        }
+        workload.extra = {}
+        if hpc_config is not None:
+            workload.extra["hpc_config"] = hpc_config.as_posix()
 
         output, stream_name = k8s_context.execute_workload(
             workload=workload, submit=submit
