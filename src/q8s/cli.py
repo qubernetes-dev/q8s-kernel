@@ -7,7 +7,7 @@ import typer
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from typing_extensions import Annotated
 
-from q8s.enums import Target
+# from q8s.enums import Target
 from q8s.execution import K8sContext
 from q8s.install import install_my_kernel_spec
 from q8s.project import Project
@@ -42,7 +42,7 @@ def init(
 def build(
     init: Annotated[bool, typer.Option(help="Initialize project")] = False,
     target: Annotated[
-        Target, typer.Option(help="Execution target", case_sensitive=False)
+        str, typer.Option(help="Execution target", case_sensitive=False)
     ] = None,
     dry_run: Annotated[
         bool, typer.Option(help="Dry run does not push images to the registry")
@@ -77,7 +77,7 @@ def build(
 
         if target:
             project.build_container(
-                target=target.value,
+                target=target,
                 progress=progress,
                 push=(not dry_run),
                 silent=silent,
@@ -102,8 +102,8 @@ def build(
 def execute(
     file: Annotated[Path, typer.Argument(help="Python file to be executed")],
     target: Annotated[
-        Target, typer.Option(help="Execution target", case_sensitive=False)
-    ] = Target.gpu,
+        str, typer.Option(help="Execution target", case_sensitive=False)
+    ] = "gpu",
     kubeconfig: Annotated[
         Path, typer.Option(help="Kubernetes configuration", envvar="KUBECONFIG")
     ] = None,
@@ -129,9 +129,6 @@ def execute(
 ):
     project = Project()
 
-    if image is None:
-        image = project.cached_images(target.value)
-
     if kubeconfig is None:
         kubeconfig = project.kubeconfig
 
@@ -150,6 +147,17 @@ def execute(
         expand=True,
     ) as progress:
         k8s_context = K8sContext(kubeconfig.as_posix(), progress=progress)
+
+        if target not in k8s_context.available_targets():
+            typer.echo(
+                f"Invalid target '{target}'. Available: {k8s_context.available_targets()}"
+            )
+            raise typer.Exit(code=1)
+
+        if image is None:
+            image = project.cached_images(target)
+
+
         k8s_context.set_target(target)
         k8s_context.set_registry_pat(registry_pat)
         k8s_context.set_container_image(image)
@@ -178,8 +186,8 @@ def jupyter(
         ),
     ] = False,
     target: Annotated[
-        Target, typer.Option(help="Execution target", case_sensitive=False)
-    ] = Target.gpu,
+        str, typer.Option(help="Execution target", case_sensitive=False)
+    ] = "gpu",
     kubeconfig: Annotated[
         Path, typer.Option(help="Kubernetes configuration", envvar="KUBECONFIG")
     ] = None,

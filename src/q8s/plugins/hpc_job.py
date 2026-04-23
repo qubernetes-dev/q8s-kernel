@@ -136,6 +136,8 @@ def load_hpc_config(workload: Workload) -> dict:
 
 
 class HPCJobTemplatePlugin(JobPlugin):
+    target_name = "hpc"
+
     @hookimpl
     def makejob(
         self,
@@ -148,7 +150,7 @@ class HPCJobTemplatePlugin(JobPlugin):
         target: Target,
     ) -> client.V1PodTemplateSpec:
 
-        if target != Target.hpc:
+        if target != self.target_name:
             return None
 
         hpc_config = load_hpc_config(workload)

@@ -13,13 +13,12 @@ from kubernetes import client, config, watch
 from rich.progress import Progress, TaskID
 
 from q8s.enums import Target
-from q8s.plugins.cpu_job import CPUJobTemplatePlugin
-from q8s.plugins.cuda_job import CUDAJobTemplatePlugin
-from q8s.plugins.hpc_job import HPCJobTemplatePlugin
 from q8s.plugins.job_template_spec import JobTemplatePluginSpec
 from q8s.utils import extract_non_none_value
 
 from .workload import Workload
+
+from importlib.metadata import entry_points
 
 
 def load_env():
@@ -114,10 +113,12 @@ class K8sContext:
         """
         self.__progress = progress
 
+        # self.jm.register(CPUJobTemplatePlugin())
+        # self.jm.register(CUDAJobTemplatePlugin())
+        # self.jm.register(HPCJobTemplatePlugin())
+
         self.jm.add_hookspecs(JobTemplatePluginSpec)
-        self.jm.register(CPUJobTemplatePlugin())
-        self.jm.register(CUDAJobTemplatePlugin())
-        self.jm.register(HPCJobTemplatePlugin())
+        self._load_plugins()
 
         task_config = self.__progress.add_task(
             "[cyan]Loading configuration...", total=1
@@ -151,15 +152,22 @@ class K8sContext:
         return "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
 
     def set_container_image(self, image: str):
-        ContainerImageValidator.validate(image, self.registry_pat)
+        # ContainerImageValidator.validate(image, self.registry_pat)
 
         self.container_image = image
 
     def set_registry_pat(self, pat: str):
         self.registry_pat = pat
 
-    def set_target(self, target: Target):
-        self.target = target
+    def set_target(self, target):
+        self.target = target.value if hasattr(target, "value") else target
+
+    def available_targets(self):
+        return [
+            p.target_name
+            for p in self.jm.get_plugins()
+            if hasattr(p, "target_name")
+        ]
 
     def create_job_object(self, code: str) -> client.V1Job:
         return None
@@ -531,3 +539,9 @@ class K8sContext:
         Abort the execution.
         """
         self.__delete_job()
+
+    def _load_plugins(self):
+        for ep in entry_points(group="q8s.targets"):
+            plugin_cls = ep.load()
+            plugin = plugin_cls()
+            self.jm.register(plugin)

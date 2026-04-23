@@ -61,3 +61,6 @@ q8sctl = "q8s.cli:app"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "--cov=q8s --cov-report=term-missing"
+
+[project.entry-points."q8s.targets"]
+cpu = "q8s.plugins.cpu_job:CPUJobTemplatePlugin"

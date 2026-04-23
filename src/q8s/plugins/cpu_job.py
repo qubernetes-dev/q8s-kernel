@@ -8,6 +8,7 @@ from q8s.workload import Workload
 
 
 class CPUJobTemplatePlugin(JobPlugin):
+    target_name = "cpu"
 
     @hookimpl
     def makejob(
@@ -21,7 +22,7 @@ class CPUJobTemplatePlugin(JobPlugin):
         target: Target,
     ) -> client.V1PodTemplateSpec:
 
-        if target != Target.cpu:
+        if target != self.target_name:
             return None
 
         volume_name = f"app-volume-{name}"
