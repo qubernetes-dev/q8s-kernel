@@ -6,7 +6,7 @@ from pathlib import Path
 from kubernetes import client
 
 from q8s.constants import WORKSPACE
-from q8s.enums import Target
+# from q8s.enums import Target
 from q8s.plugins.job import JobPlugin
 from q8s.plugins.job_template_spec import hookimpl
 from q8s.workload import Workload
@@ -14,7 +14,7 @@ from q8s.workload import Workload
 
 def _get_workload_extra(workload: Workload) -> dict:
     """
-    Gets the "extra" informatino of the workload.
+    Gets the "extra" information of the workload.
     """
     extra = getattr(workload, "extra", {})
     return extra if isinstance(extra, dict) else {}
@@ -135,8 +135,8 @@ def load_hpc_config(workload: Workload) -> dict:
     }
 
 
-class HPCJobTemplatePlugin(JobPlugin):
-    target_name = "hpc"
+class HpcRocmJobTemplatePlugin(JobPlugin):
+    target_name = "hpc-rocm"
 
     @hookimpl
     def makejob(
@@ -147,7 +147,7 @@ class HPCJobTemplatePlugin(JobPlugin):
         container_image: str,
         workload: Workload,
         env: list[client.V1EnvVar],
-        target: Target,
+        target: str,
     ) -> client.V1PodTemplateSpec:
 
         if target != self.target_name:

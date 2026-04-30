@@ -14,6 +14,8 @@ from q8s.project import Project
 from q8s.utils import get_docker_image, get_kubeconfig
 from q8s.workload import Workload
 
+from q8s.utils import get_available_targets
+
 app = typer.Typer()
 
 
@@ -75,9 +77,17 @@ def build(
             project.init_cache()
             progress.advance(task)
 
+        available = get_available_targets()
+
         if target:
+
+            if target not in available:
+                raise ValueError(
+                    f"Invalid target '{target}'. Available plugin targets: {available}"
+                )
+
             project.build_container(
-                target=target,
+                target,
                 progress=progress,
                 push=(not dry_run),
                 silent=silent,
@@ -85,12 +95,21 @@ def build(
 
         else:
             for build in project.configuration.targets.keys():
+                if build not in available:
+                    raise ValueError(
+                        f"Invalid target '{build}' in Q8Sproject. "
+                        f"Available plugin targets: {available}"
+                    )
+
                 project.build_container(
-                    build, progress=progress, push=(not dry_run), silent=silent
+                    build,
+                    progress=progress,
+                    push=(not dry_run),
+                    silent=silent,
                 )
 
-    print(f"Project {project.name} ready")
-    project.update_images_cache()
+        print(f"Project {project.name} ready")
+        project.update_images_cache()
 
 
 @app.command(
@@ -156,7 +175,6 @@ def execute(
 
         if image is None:
             image = project.cached_images(target)
-
 
         k8s_context.set_target(target)
         k8s_context.set_registry_pat(registry_pat)

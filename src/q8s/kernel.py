@@ -5,10 +5,12 @@ from ipykernel.comm import CommManager
 from ipykernel.kernelbase import Kernel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from q8s.enums import Target
+# from q8s.enums import Target
 from q8s.execution import K8sContext
 from q8s.project import Project
 from q8s.workload import Workload
+
+from q8s.utils import get_available_targets
 
 FORMAT = "[%(levelname)s %(asctime)-15s q8s_kernel] %(message)s"
 logging.basicConfig(level=logging.INFO, format=FORMAT)
@@ -161,8 +163,8 @@ class Q8sKernel(Kernel):
         comm.send(
             {
                 "command": "init",
-                "targets": Project().configuration.targets.keys(),
-                "selected_target": self.k8s_context.target.name,
+                "targets": get_available_targets(),
+                "selected_target": self.k8s_context.target,
             }
         )
 
@@ -173,9 +175,10 @@ class Q8sKernel(Kernel):
 
             # Respond to the frontend
             if data["command"] == "set_target":
-                self.k8s_context.set_target(Target(data["payload"]["target"]))
+                target = data["payload"]["target"]
+                self.k8s_context.set_target(target)
                 project = Project()
-                image = project.cached_images(data["payload"]["target"])
+                image = project.cached_images(target)
                 self.k8s_context.set_container_image(image)
                 logging.info(f"Updated execution target to {data['payload']['target']}")
             else:

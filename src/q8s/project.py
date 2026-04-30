@@ -83,19 +83,19 @@ class Q8STarget:
     python_env: Q8SPythonEnv
 
 
-@dataclass
-class Q8STargets:
-    cpu: Optional[Q8STarget]
-    gpu: Optional[Q8STarget]
-    qpu: Optional[Q8STarget]
-    hpc: Optional[Q8STarget]
+# @dataclass
+# class Q8STargets:
+#     cpu: Optional[Q8STarget]
+#     gpu: Optional[Q8STarget]
+#     qpu: Optional[Q8STarget]
+#     hpc: Optional[Q8STarget]
 
-    def keys(self):
-        return [
-            key
-            for key in self.__dataclass_fields__.keys()
-            if getattr(self, key) is not None
-        ]
+#     def keys(self):
+#         return [
+#             key
+#             for key in self.__dataclass_fields__.keys()
+#             if getattr(self, key) is not None
+#         ]
 
 
 @dataclass
@@ -108,7 +108,7 @@ class Q8SDocker:
 class Q8SProject:
     name: str
     python_env: Q8SPythonEnv
-    targets: Q8STargets
+    targets: dict[str, Q8STarget]
     docker: Q8SDocker
     kubeconfig: str
 
@@ -203,7 +203,12 @@ class Project:
             )
 
         with open(cachepath, "r") as f:
-            return yaml.safe_load(f)[target]
+            images = yaml.safe_load(f)
+
+        key = target
+
+        return images[key]
+        
 
     def build_container(
         self, target: str, progress: Progress, silent: bool, push: bool = True
@@ -437,7 +442,12 @@ class Project:
             print("# Base image specifications are available at:", file=f)
             print("# https://github.com/qubernetes-dev/images/tree/main/cuda", file=f)
 
+        if target not in base_images:
+            print(f"Skipping target '{target}' (no base image defined)")
+            return
+
         print(f"FROM {base_images[target]}", file=f)
+
         print("", file=f)
 
         print(
@@ -461,10 +471,10 @@ class Project:
         print("RUN pip install --no-cache -r requirements.txt", file=f)
 
     def __get_target(self, target: str) -> Q8STarget:
-        if hasattr(self.configuration.targets, target) is False:
+        if target not in self.configuration.targets:
             raise Exception(f"Target {target} not found")
 
-        return getattr(self.configuration.targets, target)
+        return self.configuration.targets[target]
 
     def __get_project_url(self) -> Optional[str]:
         """

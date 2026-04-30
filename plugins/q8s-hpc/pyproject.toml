@@ -1,0 +1,16 @@
+[project]
+name = "q8s-hpc"
+version = "0.1.0"
+description = "HPC execution target plugin for q8s"
+requires-python = ">=3.10"
+dependencies = ["q8s"]
+
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.entry-points."q8s.targets"]
+hpc = "q8s_hpc.hpc_job:HPCJobTemplatePlugin"

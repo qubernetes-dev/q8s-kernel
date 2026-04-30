@@ -1,7 +1,7 @@
 from kubernetes import client
 
 from q8s.constants import WORKSPACE
-from q8s.enums import Target
+# from q8s.enums import Target
 from q8s.plugins.job import JobPlugin
 from q8s.plugins.job_template_spec import hookimpl
 from q8s.workload import Workload
@@ -19,7 +19,7 @@ class CPUJobTemplatePlugin(JobPlugin):
         container_image: str,
         workload: Workload,
         env: list[client.V1EnvVar],
-        target: Target,
+        target: str,
     ) -> client.V1PodTemplateSpec:
 
         if target != self.target_name:

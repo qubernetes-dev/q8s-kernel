@@ -3,7 +3,7 @@ from typing import Dict
 import pluggy
 from kubernetes import client
 
-from q8s.enums import Target
+# from q8s.enums import Target
 from q8s.workload import Workload
 
 hookspec = pluggy.HookspecMarker("q8s")
@@ -15,7 +15,7 @@ class JobTemplatePluginSpec:
     @hookspec
     def prepare(
         self,
-        target: Target,
+        target: str,
         name: str,
         namespace: str,
         env: Dict[
@@ -34,7 +34,7 @@ class JobTemplatePluginSpec:
         container_image: str,
         workload: Workload,
         env: list[client.V1EnvVar],
-        target: Target,
+        target: str,
     ) -> client.V1PodTemplateSpec:
         return None
 

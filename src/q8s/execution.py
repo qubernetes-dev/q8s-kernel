@@ -12,7 +12,7 @@ from dxf.exceptions import DXFUnauthorizedError
 from kubernetes import client, config, watch
 from rich.progress import Progress, TaskID
 
-from q8s.enums import Target
+# from q8s.enums import Target
 from q8s.plugins.job_template_spec import JobTemplatePluginSpec
 from q8s.utils import extract_non_none_value
 
@@ -103,7 +103,7 @@ class K8sContext:
     container_image: str | None = None
     registry_pat: str | None = None
     jupyter_logger: None
-    target: Target = Target.gpu
+    target: str = "gpu"
     jm: pluggy.PluginManager = pluggy.PluginManager("q8s")
     __progress: Progress | None
 
@@ -160,7 +160,7 @@ class K8sContext:
         self.registry_pat = pat
 
     def set_target(self, target):
-        self.target = target.value if hasattr(target, "value") else target
+        self.target = target
 
     def available_targets(self):
         return [

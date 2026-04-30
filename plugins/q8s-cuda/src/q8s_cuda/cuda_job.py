@@ -3,7 +3,6 @@ import os
 from kubernetes import client
 
 from q8s.constants import WORKSPACE
-from q8s.enums import Target
 from q8s.plugins.job import JobPlugin
 from q8s.plugins.job_template_spec import hookimpl
 from q8s.workload import Workload
@@ -12,6 +11,7 @@ MEMORY = os.environ.get("MEMORY", "32Gi")
 
 
 class CUDAJobTemplatePlugin(JobPlugin):
+    target_name = "gpu"
     """
     This plugin is used to create a job template for a GPU job.
     """
@@ -25,10 +25,10 @@ class CUDAJobTemplatePlugin(JobPlugin):
         container_image: str,
         workload: Workload,
         env: list[client.V1EnvVar],
-        target: Target,
+        target: str,
     ) -> client.V1PodTemplateSpec:
 
-        if target != Target.gpu:
+        if target != self.target_name:
             return None
 
         volume_name = f"app-volume-{name}"

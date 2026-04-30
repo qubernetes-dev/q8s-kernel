@@ -1,7 +1,9 @@
 import os
 
-from q8s.enums import Target
+# from q8s.enums import Target
 from q8s.project import CacheNotBuiltException, Project, ProjectNotFoundException
+
+from importlib.metadata import entry_points
 
 
 def extract_non_none_value(arr):
@@ -15,11 +17,12 @@ def extract_non_none_value(arr):
     return non_none_values[0] if non_none_values else None
 
 
-def get_docker_image(target: Target = None, logging=None):
+def get_docker_image(target: str = None, logging=None):
     try:
         project = Project()
+        key = target
+        image = project.cached_images(target=key)
 
-        image = project.cached_images(target=target)
     except ProjectNotFoundException as e:
         if logging:
             logging.warning(e)
@@ -46,3 +49,18 @@ def get_kubeconfig(kubeconfig=None):
         return project.kubeconfig
     except ProjectNotFoundException:
         return None
+
+
+def get_available_targets():
+    available = []
+
+    for ep in entry_points(group="q8s.targets"):
+        try:
+            plugin_cls = ep.load()
+            plugin = plugin_cls()
+            if hasattr(plugin, "target_name"):
+                available.append(plugin.target_name)
+        except Exception:
+            pass
+
+    return available
