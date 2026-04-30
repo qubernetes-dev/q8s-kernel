@@ -13,4 +13,4 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [project.entry-points."q8s.targets"]
-hpc = "q8s_hpc.hpc_job:HPCJobTemplatePlugin"
+hpc-cpu = "q8s_hpc.hpc_job:HPCJobTemplatePlugin"
