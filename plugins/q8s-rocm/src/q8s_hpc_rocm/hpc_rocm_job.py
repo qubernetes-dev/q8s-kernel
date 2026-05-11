@@ -138,6 +138,9 @@ def load_hpc_config(workload: Workload) -> dict:
 class HpcRocmJobTemplatePlugin(JobPlugin):
     target_name = "hpc-rocm"
 
+    def get_base_image(self, python_version: str) -> str:
+        return "aapopeiponen/qiskit-lumi-rocm-singlenode"
+
     @hookimpl
     def makejob(
         self,

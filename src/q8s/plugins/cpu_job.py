@@ -10,6 +10,9 @@ from q8s.workload import Workload
 class CPUJobTemplatePlugin(JobPlugin):
     target_name = "cpu"
 
+    def get_base_image(self, python_version: str) -> str:
+        return f"python:{python_version}-slim"
+
     @hookimpl
     def makejob(
         self,

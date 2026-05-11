@@ -12,9 +12,13 @@ MEMORY = os.environ.get("MEMORY", "32Gi")
 
 class CUDAJobTemplatePlugin(JobPlugin):
     target_name = "gpu"
+
     """
     This plugin is used to create a job template for a GPU job.
     """
+
+    def get_base_image(self, python_version: str) -> str:
+        return f"ghcr.io/qubernetes-dev/cuda:12.8.1-r2-py{python_version}"
 
     @hookimpl
     def makejob(

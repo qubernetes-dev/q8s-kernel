@@ -137,6 +137,9 @@ def load_hpc_config(workload: Workload) -> dict:
 class HPCJobTemplatePlugin(JobPlugin):
     target_name = "hpc-cpu"
 
+    def get_base_image(self, python_version: str) -> str:
+        return f"python:{python_version}-slim"
+
     @hookimpl
     def makejob(
         self,
