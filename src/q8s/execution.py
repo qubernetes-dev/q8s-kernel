@@ -12,13 +12,12 @@ from dxf.exceptions import DXFUnauthorizedError
 from kubernetes import client, config, watch
 from rich.progress import Progress, TaskID
 
-# from q8s.enums import Target
 from q8s.plugins.job_template_spec import JobTemplatePluginSpec
 from q8s.utils import extract_non_none_value
 
 from .workload import Workload
 
-from importlib.metadata import entry_points
+from importlib.metadata import entry_points, version
 
 
 def load_env():
@@ -103,7 +102,7 @@ class K8sContext:
     container_image: str | None = None
     registry_pat: str | None = None
     jupyter_logger: None
-    target: str = "gpu"
+    target: str = "cpu"
     jm: pluggy.PluginManager = pluggy.PluginManager("q8s")
     __progress: Progress | None
 
@@ -112,10 +111,6 @@ class K8sContext:
         Initialize the Kubernetes context.
         """
         self.__progress = progress
-
-        # self.jm.register(CPUJobTemplatePlugin())
-        # self.jm.register(CUDAJobTemplatePlugin())
-        # self.jm.register(HPCJobTemplatePlugin())
 
         self.jm.add_hookspecs(JobTemplatePluginSpec)
         self._load_plugins()
@@ -162,6 +157,7 @@ class K8sContext:
     def set_target(self, target):
         self.target = target
 
+    
     def available_targets(self):
         return [
             p.target_name
@@ -204,10 +200,29 @@ class K8sContext:
         spec = client.V1JobSpec(
             template=template,
             # cleanup job and associate resources
-            ttl_seconds_after_finished=10,
+            ttl_seconds_after_finished=100,
             # do not retry failed jobs
             backoff_limit=0,
         )
+
+        plugin_version = None
+
+        for ep in entry_points(group="q8s.targets"):
+            plugin_cls = ep.load()
+            plugin = plugin_cls()
+
+            if (
+                hasattr(plugin, "target_name")
+                and plugin.target_name == self.target
+            ):
+                plugin_version = ep.dist.version
+                break
+
+        labels = {
+            "qubernetes.dev/job.type": "jupyter",
+            "qubernetes.dev/q8s-version": version("q8s"),
+            "qubernetes.dev/plugin-version": plugin_version,
+        }
 
         # Instantiate the job object
         job_spec = client.V1Job(
@@ -216,7 +231,7 @@ class K8sContext:
             metadata=client.V1ObjectMeta(
                 name=self.name,
                 namespace=self.namespace,
-                labels={"qubernetes.dev/job.type": "jupyter"},
+                labels=labels,
             ),
             spec=spec,
         )

@@ -1,6 +1,6 @@
 import unittest
 
-from q8s.bakefile import Bakefile, BakeTargetName, BuildPlatform
+from q8s.bakefile import Bakefile, BuildPlatform
 
 
 class TestBakefile(unittest.TestCase):
@@ -15,9 +15,9 @@ class TestBakefile(unittest.TestCase):
         )
 
         self.assertEqual(bakefile.group.default.targets, ["cpu"])
-        self.assertIn(BakeTargetName.cpu, bakefile.target)
+        self.assertIn("cpu", bakefile.target)
 
-        target_data = bakefile.target[BakeTargetName.cpu]
+        target_data = bakefile.target["cpu"]
         self.assertEqual(target_data.context, "./cpu")
         self.assertEqual(target_data.dockerfile, "Dockerfile")
         self.assertEqual(target_data.tags, ["cpu-image:latest"])
@@ -39,23 +39,13 @@ class TestBakefile(unittest.TestCase):
 
         self.assertEqual(bakefile.group.default.targets, ["cpu", "gpu"])
         self.assertSetEqual(
-            set(bakefile.target.keys()), {BakeTargetName.cpu, BakeTargetName.gpu}
+            set(bakefile.target.keys()), {"cpu", "gpu"}
         )
 
-        gpu_target = bakefile.target[BakeTargetName.gpu]
+        gpu_target = bakefile.target["gpu"]
         self.assertEqual(gpu_target.context, "./gpu")
         self.assertEqual(gpu_target.platforms, [BuildPlatform.linux_arm64])
-
-    def test_invalid_target_name_raises(self):
-        bakefile = Bakefile()
-
-        with self.assertRaises(ValueError):
-            bakefile.add_target(
-                name="invalid",
-                tags=["tag"],
-                platforms=[BuildPlatform.linux_amd64.value],
-            )
-
+        
     def test_invalid_platform_raises(self):
         bakefile = Bakefile()
 

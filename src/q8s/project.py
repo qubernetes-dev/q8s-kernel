@@ -18,7 +18,9 @@ from q8s.bakefile import Bakefile, BuildPlatform
 from q8s.constants import WORKSPACE
 from q8s.plugins.utils.git_info import get_git_info
 
-from q8s.utils import get_available_targets
+from q8s.targets import get_available_targets
+from importlib.metadata import entry_points
+
 
 
 def load(path: str):
@@ -210,6 +212,21 @@ class Project:
         key = target
 
         return images[key]
+    
+    def _get_plugin_for_target(self, target: str):
+        for ep in entry_points(group="q8s.targets"):
+            try:
+                plugin_cls = ep.load()
+                plugin = plugin_cls()
+
+                if hasattr(plugin, "target_name"):
+                    if plugin.target_name == target:
+                        return plugin
+
+            except Exception as e:
+                print(f"Failed to load plugin {ep.name}: {e}")
+
+        return None
         
 
     def build_container(

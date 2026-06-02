@@ -7,14 +7,13 @@ import typer
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from typing_extensions import Annotated
 
-# from q8s.enums import Target
 from q8s.execution import K8sContext
 from q8s.install import install_my_kernel_spec
 from q8s.project import Project
 from q8s.utils import get_docker_image, get_kubeconfig
 from q8s.workload import Workload
 
-from q8s.utils import get_available_targets
+from q8s.targets import get_available_targets
 
 app = typer.Typer()
 
@@ -122,7 +121,7 @@ def execute(
     file: Annotated[Path, typer.Argument(help="Python file to be executed")],
     target: Annotated[
         str, typer.Option(help="Execution target", case_sensitive=False)
-    ] = "gpu",
+    ] = "cpu",
     kubeconfig: Annotated[
         Path, typer.Option(help="Kubernetes configuration", envvar="KUBECONFIG")
     ] = None,
@@ -205,7 +204,7 @@ def jupyter(
     ] = False,
     target: Annotated[
         str, typer.Option(help="Execution target", case_sensitive=False)
-    ] = "gpu",
+    ] = "cpu",
     kubeconfig: Annotated[
         Path, typer.Option(help="Kubernetes configuration", envvar="KUBECONFIG")
     ] = None,

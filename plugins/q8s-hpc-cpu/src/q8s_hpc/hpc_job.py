@@ -6,15 +6,15 @@ from pathlib import Path
 from kubernetes import client
 
 from q8s.constants import WORKSPACE
-# from q8s.enums import Target
 from q8s.plugins.job import JobPlugin
 from q8s.plugins.job_template_spec import hookimpl
 from q8s.workload import Workload
 
+from importlib.metadata import version
 
 def _get_workload_extra(workload: Workload) -> dict:
     """
-    Gets the "extra" information of the workload.
+    Gets the "extra" informatino of the workload.
     """
     extra = getattr(workload, "extra", {})
     return extra if isinstance(extra, dict) else {}
@@ -135,11 +135,11 @@ def load_hpc_config(workload: Workload) -> dict:
     }
 
 
-class HpcRocmJobTemplatePlugin(JobPlugin):
-    target_name = "hpc-rocm"
+class HPCJobTemplatePlugin(JobPlugin):
+    target_name = "hpc-cpu"
 
     def get_base_image(self, python_version: str) -> str:
-        return "aapopeiponen/qiskit-lumi-rocm-singlenode"
+        return f"python:{python_version}-slim"
 
     @hookimpl
     def makejob(
@@ -161,6 +161,21 @@ class HpcRocmJobTemplatePlugin(JobPlugin):
         volume_name = f"app-volume-{name}"
 
         env_var = list(env)
+
+        env_var.append(
+            client.V1EnvVar(
+                name="Q8S_VERSION",
+                value=version("q8s"),
+            )
+        )
+
+        env_var.append(
+            client.V1EnvVar(
+                name="Q8S_PLUGIN_VERSION",
+                value=version("q8s-hpc-cpu"),
+            )
+        )
+
         if workload.is_src_project:
             env_var.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
 

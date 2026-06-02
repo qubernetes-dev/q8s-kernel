@@ -1,6 +1,5 @@
 import os
 
-# from q8s.enums import Target
 from q8s.project import CacheNotBuiltException, Project, ProjectNotFoundException
 
 from importlib.metadata import entry_points
@@ -49,18 +48,3 @@ def get_kubeconfig(kubeconfig=None):
         return project.kubeconfig
     except ProjectNotFoundException:
         return None
-
-
-def get_available_targets():
-    available = []
-
-    for ep in entry_points(group="q8s.targets"):
-        try:
-            plugin_cls = ep.load()
-            plugin = plugin_cls()
-            if hasattr(plugin, "target_name"):
-                available.append(plugin.target_name)
-        except Exception:
-            pass
-
-    return available

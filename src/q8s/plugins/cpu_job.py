@@ -1,16 +1,24 @@
+from importlib.metadata import version
+import re
+
 from kubernetes import client
 
 from q8s.constants import WORKSPACE
-# from q8s.enums import Target
 from q8s.plugins.job import JobPlugin
 from q8s.plugins.job_template_spec import hookimpl
 from q8s.workload import Workload
 
+_PYTHON_VERSION_RE = re.compile(r"^3(\.\d+){1,2}$")
 
 class CPUJobTemplatePlugin(JobPlugin):
     target_name = "cpu"
-
+    
     def get_base_image(self, python_version: str) -> str:
+        if not _PYTHON_VERSION_RE.fullmatch(python_version):
+            raise ValueError(
+                f"Invalid python_version format: {python_version!r}"
+            )
+
         return f"python:{python_version}-slim"
 
     @hookimpl
@@ -33,6 +41,20 @@ class CPUJobTemplatePlugin(JobPlugin):
         env_var = list(env)
         if workload.is_src_project:
             env_var.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
+
+        env_var.append(
+            client.V1EnvVar(
+                name="Q8S_VERSION",
+                value=version("q8s"),
+            )
+        )
+
+        env_var.append(
+            client.V1EnvVar(
+                name="Q8S_PLUGIN_VERSION",
+                value=version("q8s"),
+            )
+        )
 
         self.patch_environment_with_git_info(env_var)
 

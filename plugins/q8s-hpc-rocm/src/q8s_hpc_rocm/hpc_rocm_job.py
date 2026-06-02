@@ -11,9 +11,11 @@ from q8s.plugins.job import JobPlugin
 from q8s.plugins.job_template_spec import hookimpl
 from q8s.workload import Workload
 
+from importlib.metadata import version
+
 def _get_workload_extra(workload: Workload) -> dict:
     """
-    Gets the "extra" informatino of the workload.
+    Gets the "extra" information of the workload.
     """
     extra = getattr(workload, "extra", {})
     return extra if isinstance(extra, dict) else {}
@@ -134,11 +136,11 @@ def load_hpc_config(workload: Workload) -> dict:
     }
 
 
-class HPCJobTemplatePlugin(JobPlugin):
-    target_name = "hpc-cpu"
+class HpcRocmJobTemplatePlugin(JobPlugin):
+    target_name = "hpc-rocm"
 
     def get_base_image(self, python_version: str) -> str:
-        return f"python:{python_version}-slim"
+        return "aapopeiponen/qiskit-lumi-rocm-singlenode"
 
     @hookimpl
     def makejob(
@@ -162,6 +164,21 @@ class HPCJobTemplatePlugin(JobPlugin):
         env_var = list(env)
         if workload.is_src_project:
             env_var.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
+
+
+        env_var.append(
+            client.V1EnvVar(
+                name="Q8S_VERSION",
+                value=version("q8s"),
+            )
+        )
+
+        env_var.append(
+            client.V1EnvVar(
+                name="Q8S_PLUGIN_VERSION",
+                value=version("q8s-hpc-rocm"),
+            )
+        )
 
         self.patch_environment_with_git_info(env_var)
 

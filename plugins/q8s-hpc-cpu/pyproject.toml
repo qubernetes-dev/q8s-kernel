@@ -1,5 +1,5 @@
 [project]
-name = "q8s-hpc"
+name = "q8s-hpc-cpu"
 version = "0.1.0"
 description = "HPC execution target plugin for q8s"
 requires-python = ">=3.10"
