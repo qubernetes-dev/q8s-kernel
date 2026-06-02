@@ -12,7 +12,7 @@ def get_available_targets():
             if hasattr(plugin, "target_name"):
                 available.append(plugin.target_name)
 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Failed to load plugin {ep.name}: {e}")
 
     return available
