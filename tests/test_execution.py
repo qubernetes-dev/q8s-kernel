@@ -261,6 +261,64 @@ class TestK8sContextCompleteJobStatus(unittest.TestCase):
         self.assertEqual(progress.update.call_count, 2)
         progress.advance.assert_called_once_with("task-id", 1)
 
+    @patch("q8s.execution.entry_points")
+    def test_create_job_object_sets_plugin_version_label(self, mock_entry_points):
+        ctx = K8sContext.__new__(K8sContext)
+
+        ctx.target = "cpu"
+        ctx.name = "test-job"
+        ctx.namespace = "default"
+        ctx.registry_pat = None
+
+        ctx._K8sContext__progress = Mock()
+        ctx._K8sContext__progress.add_task.return_value = "task-id"
+        ctx._K8sContext__progress.advance = Mock()
+        ctx._K8sContext__progress.console = Mock()
+
+        ctx._K8sContext__prepare_environment = Mock(return_value=[])
+
+        ctx.jm = Mock()
+
+        ctx.jm.hook.prepare = Mock()
+        ctx.jm.hook.prepare.return_value = []
+
+        ctx._K8sContext__env = {}
+
+        plugin_template = Mock()
+        ctx.jm.hook.makejob.return_value = [plugin_template]
+
+        ctx.batch_api_instance = Mock()
+
+        created_job = Mock()
+        created_job.metadata.name = "test-job"
+        created_job.metadata.uid = "uid"
+        ctx.batch_api_instance.create_namespaced_job.return_value = created_job
+
+        ctx._K8sContext__create_config_map_object_from_workload = Mock()
+        ctx._K8sContext__create_environment_secret = Mock()
+
+        mock_ep = Mock()
+        mock_ep.dist.version = "1.2.3"
+
+        plugin_cls = Mock()
+        plugin_instance = Mock()
+        plugin_instance.target_name = "cpu"
+
+        plugin_cls.return_value = plugin_instance
+        mock_ep.load.return_value = plugin_cls
+
+        mock_entry_points.return_value = [mock_ep]
+
+        workload = Workload.from_code("print('hi')")
+
+        ctx._K8sContext__create_job_object_from_workload(workload)
+
+        created_spec = ctx.batch_api_instance.create_namespaced_job.call_args.kwargs["body"]
+
+        self.assertEqual(
+            created_spec.metadata.labels["qubernetes.dev/plugin-version"],
+            "1.2.3",
+        )
 
 if __name__ == "__main__":
     unittest.main()
