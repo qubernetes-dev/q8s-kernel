@@ -19,7 +19,7 @@ mocked_configuration = {
         "cpu": {"python_env": {"dependencies": ["qiskit-aer==0.15.1"]}}
     },
     "docker": {"username": "vstirbu", "registry": None},
-    "kubeconfig": "tests/fixtures/cache/kubeconfig",
+    "kubeconfig": "packages/q8s/tests/fixtures/cache/kubeconfig",
 }
 
 
@@ -40,7 +40,7 @@ class TestProject(unittest.TestCase):
         mock_load.return_value = mocked_configuration
 
         # TODO: mock reading configuration file
-        project = Project("tests/fixtures/cache")
+        project = Project("packages/q8s/tests/fixtures/cache")
 
         self.assertEqual(project.name, "Example")
         self.assertIsNotNone(project.configuration.python_env)
@@ -53,7 +53,7 @@ class TestProject(unittest.TestCase):
     def test_init_cache(self, mock_load: Mock):
         mock_load.return_value = mocked_configuration
 
-        project_path = "tests/fixtures/cache"
+        project_path = "packages/q8s/tests/fixtures/cache"
         project = Project(project_path)
 
         self.assertFalse(exists(join(project_path, ".q8s_cache/cpu/requirements.txt")))
@@ -66,7 +66,7 @@ class TestProject(unittest.TestCase):
     def test_clear_cache(self, mock_load: Mock):
         mock_load.return_value = mocked_configuration
 
-        project_path = "tests/fixtures/cache"
+        project_path = "packages/q8s/tests/fixtures/cache"
         project = Project(project_path)
 
         project.init_cache()
@@ -81,7 +81,7 @@ class TestProject(unittest.TestCase):
     def test_check_cache(self, mock_load: Mock):
         mock_load.return_value = mocked_configuration
 
-        project_path = "tests/fixtures/cache"
+        project_path = "packages/q8s/tests/fixtures/cache"
         project = Project(project_path)
 
         project.init_cache()
@@ -99,7 +99,7 @@ class TestProject(unittest.TestCase):
         mock_load.return_value = mocked_configuration
         mock_datetime.now.return_value.isoformat.return_value = "2024-01-01T00:00:00"
 
-        project = Project("tests/fixtures/cache")
+        project = Project("packages/q8s/tests/fixtures/cache")
 
         dockerfile = StringIO()
         project._Project__create_dockerfile("cpu", dockerfile)
@@ -140,7 +140,7 @@ class TestProject(unittest.TestCase):
             extra={},
         )
 
-        project = Project("tests/fixtures/cache")
+        project = Project("packages/q8s/tests/fixtures/cache")
 
         bakefile = StringIO()
         project._Project___create_bakefile(bakefile)
@@ -169,7 +169,7 @@ class TestProject(unittest.TestCase):
             extra={},
         )
 
-        project = Project("tests/fixtures/cache")
+        project = Project("packages/q8s/tests/fixtures/cache")
 
         bakefile = StringIO()
         project._Project___create_bakefile(bakefile)
@@ -202,7 +202,7 @@ class TestProject(unittest.TestCase):
             extra={},
         )
 
-        project_path = "tests/fixtures/cache"
+        project_path = "packages/q8s/tests/fixtures/cache"
         project = Project(project_path)
 
         mock_process = _completed_process()
@@ -244,7 +244,7 @@ class TestProject(unittest.TestCase):
             extra={},
         )
 
-        project_path = "tests/fixtures/cache"
+        project_path = "packages/q8s/tests/fixtures/cache"
         project = Project(project_path)
 
         mock_process = _completed_process()
@@ -286,7 +286,7 @@ class TestProject(unittest.TestCase):
             extra={},
         )
 
-        project_path = "tests/fixtures/cache"
+        project_path = "packages/q8s/tests/fixtures/cache"
         project = Project(project_path)
 
         project.init_cache()
@@ -322,7 +322,7 @@ class TestProject(unittest.TestCase):
             extra={},
         )
 
-        project_path = "tests/fixtures/cache"
+        project_path = "packages/q8s/tests/fixtures/cache"
         project = Project(project_path)
 
         project.init_cache()
@@ -354,11 +354,11 @@ class TestProject(unittest.TestCase):
             extra={},
         )
 
-        project = Project("tests/fixtures/cache")
+        project = Project("packages/q8s/tests/fixtures/cache")
         image_name = project._Project__image_name("cpu")
 
         self.assertEqual(image_name, "vstirbu/q8s-example:cpu-main")
-        mock_get_git_info.assert_called_once_with("tests/fixtures/cache")
+        mock_get_git_info.assert_called_once_with("packages/q8s/tests/fixtures/cache")
 
     @unittest.mock.patch("q8s.project.get_git_info")
     @unittest.mock.patch("q8s.project.load")
@@ -373,11 +373,11 @@ class TestProject(unittest.TestCase):
             extra={},
         )
 
-        project = Project("tests/fixtures/cache")
+        project = Project("packages/q8s/tests/fixtures/cache")
         image_name = project._Project__image_name("cpu")
 
         self.assertEqual(image_name, "vstirbu/q8s-example:cpu-feature-1")
-        mock_get_git_info.assert_called_once_with("tests/fixtures/cache")
+        mock_get_git_info.assert_called_once_with("packages/q8s/tests/fixtures/cache")
 
     @unittest.mock.patch("q8s.project.get_git_info")
     @unittest.mock.patch("q8s.project.load")
@@ -389,8 +389,8 @@ class TestProject(unittest.TestCase):
             commit=None, branch=None, remote_url=None, extra={"reason": "no_repo"}
         )
 
-        project = Project("tests/fixtures/cache")
+        project = Project("packages/q8s/tests/fixtures/cache")
         image_name = project._Project__image_name("cpu")
 
         self.assertEqual(image_name, "vstirbu/q8s-example:cpu")
-        mock_get_git_info.assert_called_once_with("tests/fixtures/cache")
+        mock_get_git_info.assert_called_once_with("packages/q8s/tests/fixtures/cache")
