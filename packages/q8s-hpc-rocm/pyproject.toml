@@ -1,9 +1,27 @@
 [project]
 name = "q8s-hpc-rocm"
 version = "0.1.0"
-description = "ROCm execution target plugin for q8s"
+description = "ROCm-based GPU execution target plugin for running q8s jobs on HPC nodes"
+authors = [{ name = "Vlad Stirbu", email = "vstirbu@gmail.com" }]
+readme = "README.md"
+license = { file = "LICENSE" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = ["q8s>=0.14.0"]
 requires-python = ">=3.10"
-dependencies = ["q8s"]
+
+[project.urls]
+Homepage = "https://github.com/qubernetes-dev/q8s-kernel"
+Issues = "https://github.com/qubernetes-dev/q8s-kernel/issues"
 
 [build-system]
 requires = ["setuptools >= 61.0"]
