@@ -4,16 +4,14 @@ from pathlib import Path
 from subprocess import Popen
 
 import typer
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
-from typing_extensions import Annotated
-
 from q8s.execution import K8sContext
 from q8s.install import install_my_kernel_spec
 from q8s.project import Project
+from q8s.targets import get_available_targets
 from q8s.utils import get_docker_image, get_kubeconfig
 from q8s.workload import Workload
-
-from q8s.targets import get_available_targets
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from typing_extensions import Annotated
 
 app = typer.Typer()
 
@@ -140,7 +138,7 @@ def execute(
         Path | None,
         typer.Option(
             "--hpc-config",
-            help="Path to HPC config file. If omitted, q8s will look for 'HpcConfig' next to 'Q8Sproject'.",
+            help="Path to HPC config file. If omitted, q8s will look for 'HpcConfig' next to 'Q8Sproject'.",  # noqa: E501
         ),
     ] = None,
     args: Annotated[list[str], typer.Argument(help="Additional arguments")] = None,

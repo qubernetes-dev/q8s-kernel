@@ -38,14 +38,12 @@ class TestBakefile(unittest.TestCase):
         )
 
         self.assertEqual(bakefile.group.default.targets, ["cpu", "gpu"])
-        self.assertSetEqual(
-            set(bakefile.target.keys()), {"cpu", "gpu"}
-        )
+        self.assertSetEqual(set(bakefile.target.keys()), {"cpu", "gpu"})
 
         gpu_target = bakefile.target["gpu"]
         self.assertEqual(gpu_target.context, "./gpu")
         self.assertEqual(gpu_target.platforms, [BuildPlatform.linux_arm64])
-        
+
     def test_invalid_platform_raises(self):
         bakefile = Bakefile()
 

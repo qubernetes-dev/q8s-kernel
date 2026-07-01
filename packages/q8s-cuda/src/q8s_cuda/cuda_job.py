@@ -1,14 +1,12 @@
 import os
 import re
+from importlib.metadata import version
 
 from kubernetes import client
-
 from q8s.constants import WORKSPACE
 from q8s.plugins.job import JobPlugin
 from q8s.plugins.job_template_spec import hookimpl
 from q8s.workload import Workload
-
-from importlib.metadata import version
 
 _PYTHON_VERSION_RE = re.compile(r"^3(\.\d+){1,2}$")
 
@@ -24,9 +22,7 @@ class CUDAJobTemplatePlugin(JobPlugin):
 
     def get_base_image(self, python_version: str) -> str:
         if not _PYTHON_VERSION_RE.fullmatch(python_version):
-            raise ValueError(
-                f"Invalid python_version format: {python_version!r}"
-            )
+            raise ValueError(f"Invalid python_version format: {python_version!r}")
 
         return f"ghcr.io/qubernetes-dev/cuda:12.8.1-r2-py{python_version}"
 

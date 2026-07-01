@@ -4,6 +4,7 @@ import selectors
 import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from importlib.metadata import entry_points
 from io import StringIO
 from os.path import join
 from pathlib import Path
@@ -12,15 +13,11 @@ from typing import List, Optional
 
 import yaml
 from dacite import from_dict
-from rich.progress import Progress
-
 from q8s.bakefile import Bakefile, BuildPlatform
 from q8s.constants import WORKSPACE
 from q8s.plugins.utils.git_info import get_git_info
-
 from q8s.targets import get_available_targets
-from importlib.metadata import entry_points
-
+from rich.progress import Progress
 
 
 def load(path: str):
@@ -212,7 +209,7 @@ class Project:
         key = target
 
         return images[key]
-    
+
     def _get_plugin_for_target(self, target: str):
         for ep in entry_points(group="q8s.targets"):
             try:
@@ -227,7 +224,6 @@ class Project:
                 print(f"Failed to load plugin {ep.name}: {e}")
 
         return None
-        
 
     def build_container(
         self, target: str, progress: Progress, silent: bool, push: bool = True
@@ -463,7 +459,9 @@ class Project:
 
         if plugin is None:
             if target == "qpu":
-                base_image = f"python:{self.configuration.python_env.python_version}-slim"
+                base_image = (
+                    f"python:{self.configuration.python_env.python_version}-slim"
+                )
             else:
                 raise ValueError(
                     f"No plugin found for target '{target}'. "

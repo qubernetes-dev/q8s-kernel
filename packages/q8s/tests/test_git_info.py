@@ -4,7 +4,6 @@ import unittest
 from pathlib import Path
 
 from git import Actor, Repo
-
 from q8s.plugins.utils.git_info import (
     GitExtraInfo,
     GitExtraReason,

@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import patch
 
 import matplotlib.pyplot as plt
-
 from q8s.matplotlib.backend import Q8SLoggerBackend
 
 

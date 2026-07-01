@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from kubernetes import client
-
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin
 
 
@@ -15,7 +14,6 @@ class TestCPUJobTemplatePlugin(unittest.TestCase):
     @patch("q8s.plugins.cpu_job.client.V1VolumeMount")
     @patch("q8s.plugins.cpu_job.client.V1Volume")
     @patch("q8s.plugins.cpu_job.client.V1ConfigMapVolumeSource")
-
     def test_makejob_cpu(
         self,
         mock_v1_config_map_volume_source,
@@ -59,7 +57,6 @@ class TestCPUJobTemplatePlugin(unittest.TestCase):
         mock_v1_volume.assert_called_once()
         mock_v1_config_map_volume_source.assert_called_once()
 
-
     def test_makejob_invalid_target(self):
         plugin = CPUJobTemplatePlugin()
         name = "test-job"
@@ -87,7 +84,6 @@ class TestCPUJobTemplatePlugin(unittest.TestCase):
 
         self.assertIsNone(result)
 
-
     def test_get_base_image_default(self):
         plugin = CPUJobTemplatePlugin()
 
@@ -109,7 +105,6 @@ class TestCPUJobTemplatePlugin(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             plugin.get_base_image("invalid")
-
 
 
 if __name__ == "__main__":

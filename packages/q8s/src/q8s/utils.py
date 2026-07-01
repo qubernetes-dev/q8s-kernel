@@ -2,8 +2,6 @@ import os
 
 from q8s.project import CacheNotBuiltException, Project, ProjectNotFoundException
 
-from importlib.metadata import entry_points
-
 
 def extract_non_none_value(arr):
     """

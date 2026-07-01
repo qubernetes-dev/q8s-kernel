@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import patch
 
 from kubernetes import client
-
 from q8s.plugins.job import JobPlugin
 from q8s.plugins.utils.git_info import GitInfo
 

@@ -3,13 +3,11 @@ import os
 
 from ipykernel.comm import CommManager
 from ipykernel.kernelbase import Kernel
-from rich.progress import Progress, SpinnerColumn, TextColumn
-
 from q8s.execution import K8sContext
 from q8s.project import Project
-from q8s.workload import Workload
-
 from q8s.targets import get_available_targets
+from q8s.workload import Workload
+from rich.progress import Progress, SpinnerColumn, TextColumn
 
 FORMAT = "[%(levelname)s %(asctime)-15s q8s_kernel] %(message)s"
 logging.basicConfig(level=logging.INFO, format=FORMAT)

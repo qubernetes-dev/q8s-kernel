@@ -35,7 +35,7 @@ jobs:
       - name: Install q8s-cuda
         working-directory: packages/q8s-cuda
         run: pip install .
-          
+
       # - name: Install dependencies
       #   run: >-
       #     python3 -m

@@ -4,7 +4,6 @@ from io import StringIO
 from unittest.mock import Mock
 
 from dockerfile_parse import DockerfileParser
-
 from q8s.constants import WORKSPACE
 from q8s.plugins.utils.git_info import GitInfo
 from q8s.project import Project
@@ -20,6 +19,7 @@ mocked_configuration = {
     "docker": {"username": "vstirbu", "registry": None},
     "kubeconfig": "tests/fixtures/cache/kubeconfig",
 }
+
 
 class TestProject(unittest.TestCase):
     @unittest.mock.patch("q8s.project.datetime")
@@ -81,7 +81,7 @@ class TestProject(unittest.TestCase):
             "gpu",
             bakefile_data["group"]["default"]["targets"],
         )
-        
+
         self.assertEqual(
             bakefile_data["target"]["gpu"],
             {

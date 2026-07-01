@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from kubernetes import client
-
 from q8s_cuda.cuda_job import CUDAJobTemplatePlugin
 
 
@@ -17,7 +16,6 @@ class TestCUDAJobTemplatePlugin(unittest.TestCase):
     @patch("q8s.plugins.job_template_spec.client.V1ConfigMapVolumeSource")
     @patch("q8s.plugins.job_template_spec.client.V1LocalObjectReference")
     @patch("q8s.plugins.job_template_spec.client.V1ResourceRequirements")
-
     def test_makejob_gpu(
         self,
         mock_v1_resource_requirements,
@@ -89,6 +87,7 @@ class TestCUDAJobTemplatePlugin(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             plugin.get_base_image("invalid")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,7 @@
-from qiskit import QuantumCircuit, transpile
-from qiskit_aer import Aer, AerSimulator, AerError
 import os
+
+from qiskit import QuantumCircuit, transpile
+from qiskit_aer import AerSimulator
 
 
 def demo_function(shotsAmount=1000):

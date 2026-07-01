@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import shlex
+from importlib.metadata import version
 from pathlib import Path
 
 from kubernetes import client
-
 from q8s.constants import WORKSPACE
+
 # from q8s.enums import Target
 from q8s.plugins.job import JobPlugin
 from q8s.plugins.job_template_spec import hookimpl
 from q8s.workload import Workload
 
-from importlib.metadata import version
 
 def _get_workload_extra(workload: Workload) -> dict:
     """
@@ -23,7 +23,7 @@ def _get_workload_extra(workload: Workload) -> dict:
 
 def _find_project_root(start: Path) -> Path:
     """
-    Tries to find Q8Sproject file from current directory or a parent directory, 
+    Tries to find Q8Sproject file from current directory or a parent directory,
     in order to locate the root directory of the project.
     """
     current = start.resolve()
@@ -36,7 +36,7 @@ def _find_project_root(start: Path) -> Path:
 def resolve_hpc_config_path(workload: Workload) -> Path:
     """
     Tries to find all necessary slurm settings by trying to
-    find HpcConfig file in the project root directory, and checking if 
+    find HpcConfig file in the project root directory, and checking if
     the workload already includes a path to it.
     """
     extra = _get_workload_extra(workload)
@@ -71,13 +71,13 @@ def _parse_config_line(line: str, line_number: int) -> tuple[str, str] | None:
     first = parts[0]
     if not first.startswith("--"):
         raise ValueError(
-            f"Invalid HPC config line {line_number}: expected a flag starting with '--', got: {line!r}"
+            f"Invalid HPC config line {line_number}: expected a flag starting with '--', got: {line!r}"  # noqa: E501
         )
 
     if "=" in first:
         if len(parts) != 1:
             raise ValueError(
-                f"Invalid HPC config line {line_number}: do not mix '--flag=value' with extra tokens: {line!r}"
+                f"Invalid HPC config line {line_number}: do not mix '--flag=value' with extra tokens: {line!r}"  # noqa: E501
             )
         flag, value = first.split("=", 1)
     else:
@@ -165,7 +165,6 @@ class HpcRocmJobTemplatePlugin(JobPlugin):
         if workload.is_src_project:
             env_var.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
 
-
         env_var.append(
             client.V1EnvVar(
                 name="Q8S_VERSION",
@@ -202,9 +201,7 @@ class HpcRocmJobTemplatePlugin(JobPlugin):
             ],
         )
 
-        annotations = {
-            "slurm-job.vk.io/flags": " ".join(hpc_config["slurm_flags"])
-        }
+        annotations = {"slurm-job.vk.io/flags": " ".join(hpc_config["slurm_flags"])}
 
         template = client.V1PodTemplateSpec(
             metadata=client.V1ObjectMeta(
@@ -216,13 +213,10 @@ class HpcRocmJobTemplatePlugin(JobPlugin):
             ),
             spec=client.V1PodSpec(
                 containers=[container],
-                node_selector={
-                    "kubernetes.io/hostname": hpc_config["q8s_node"]
-                },
+                node_selector={"kubernetes.io/hostname": hpc_config["q8s_node"]},
                 tolerations=[
                     client.V1Toleration(
-                        key="virtual-node.interlink/no-schedule",
-                        operator="Exists"
+                        key="virtual-node.interlink/no-schedule", operator="Exists"
                     )
                 ],
                 image_pull_secrets=(

@@ -5,19 +5,16 @@ from os.path import exists, join
 from unittest.mock import Mock
 
 from dockerfile_parse import DockerfileParser
-from rich.progress import Progress, SpinnerColumn
-
 from q8s.constants import WORKSPACE
+from q8s.plugins.cpu_job import CPUJobTemplatePlugin
 from q8s.plugins.utils.git_info import GitInfo
 from q8s.project import Project
-from q8s.plugins.cpu_job import CPUJobTemplatePlugin
+from rich.progress import Progress, SpinnerColumn
 
 mocked_configuration = {
     "name": "Example",
     "python_env": {"dependencies": ["qiskit==1.1.0"]},
-    "targets": {
-        "cpu": {"python_env": {"dependencies": ["qiskit-aer==0.15.1"]}}
-    },
+    "targets": {"cpu": {"python_env": {"dependencies": ["qiskit-aer==0.15.1"]}}},
     "docker": {"username": "vstirbu", "registry": None},
     "kubeconfig": "packages/q8s/tests/fixtures/cache/kubeconfig",
 }
@@ -33,7 +30,6 @@ def _completed_process():
 
 
 class TestProject(unittest.TestCase):
-
 
     @unittest.mock.patch("q8s.project.load")
     def test_init(self, mock_load: Mock):
@@ -130,7 +126,6 @@ class TestProject(unittest.TestCase):
 
     @unittest.mock.patch("q8s.project.get_git_info")
     @unittest.mock.patch("q8s.project.load")
-
     def test_create_bakefile_no_repo(self, mock_load: Mock, mock_get_git_info: Mock):
         mock_load.return_value = mocked_configuration
         mock_get_git_info.return_value = GitInfo(

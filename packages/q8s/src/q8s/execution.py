@@ -2,6 +2,7 @@ import base64
 import logging
 import random
 import string
+from importlib.metadata import entry_points, version
 from json import JSONEncoder, loads
 
 import pluggy
@@ -10,14 +11,11 @@ from dotenv import dotenv_values
 from dxf import DXF
 from dxf.exceptions import DXFUnauthorizedError
 from kubernetes import client, config, watch
-from rich.progress import Progress, TaskID
-
 from q8s.plugins.job_template_spec import JobTemplatePluginSpec
 from q8s.utils import extract_non_none_value
+from rich.progress import Progress, TaskID
 
 from .workload import Workload
-
-from importlib.metadata import entry_points, version
 
 
 def load_env():
@@ -157,12 +155,9 @@ class K8sContext:
     def set_target(self, target):
         self.target = target
 
-    
     def available_targets(self):
         return [
-            p.target_name
-            for p in self.jm.get_plugins()
-            if hasattr(p, "target_name")
+            p.target_name for p in self.jm.get_plugins() if hasattr(p, "target_name")
         ]
 
     def create_job_object(self, code: str) -> client.V1Job:
@@ -211,10 +206,7 @@ class K8sContext:
             plugin_cls = ep.load()
             plugin = plugin_cls()
 
-            if (
-                hasattr(plugin, "target_name")
-                and plugin.target_name == self.target
-            ):
+            if hasattr(plugin, "target_name") and plugin.target_name == self.target:
                 plugin_version = ep.dist.version
                 break
 

@@ -4,7 +4,6 @@ from unittest.mock import Mock, patch
 
 import requests
 from dxf.exceptions import DXFUnauthorizedError
-
 from q8s.execution import ContainerImageValidator, K8sContext
 from q8s.workload import Workload
 
@@ -313,12 +312,15 @@ class TestK8sContextCompleteJobStatus(unittest.TestCase):
 
         ctx._K8sContext__create_job_object_from_workload(workload)
 
-        created_spec = ctx.batch_api_instance.create_namespaced_job.call_args.kwargs["body"]
+        created_spec = ctx.batch_api_instance.create_namespaced_job.call_args.kwargs[
+            "body"
+        ]
 
         self.assertEqual(
             created_spec.metadata.labels["qubernetes.dev/plugin-version"],
             "1.2.3",
         )
+
 
 if __name__ == "__main__":
     unittest.main()

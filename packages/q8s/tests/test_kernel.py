@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from q8s.kernel import Q8sKernel, kernel_comm_identifier
 
 
