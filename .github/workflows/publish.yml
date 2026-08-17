@@ -36,6 +36,14 @@ jobs:
         working-directory: packages/q8s-cuda
         run: pip install .
 
+      - name: Install q8s-hpc-cpu
+        working-directory: packages/q8s-hpc-cpu
+        run: pip install .
+
+      - name: Install q8s-hpc-rocm
+        working-directory: packages/q8s-hpc-rocm
+        run: pip install .
+
       # - name: Install dependencies
       #   run: >-
       #     python3 -m
