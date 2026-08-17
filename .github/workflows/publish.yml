@@ -24,15 +24,36 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
+
+      - name: Install q8s
+        working-directory: packages/q8s
         run: >-
           python3 -m
           pip install
           .[development]
+
+      - name: Install q8s-cuda
+        working-directory: packages/q8s-cuda
+        run: pip install .
+
+      - name: Install q8s-hpc-cpu
+        working-directory: packages/q8s-hpc-cpu
+        run: pip install .
+
+      - name: Install q8s-hpc-rocm
+        working-directory: packages/q8s-hpc-rocm
+        run: pip install .
+
+      # - name: Install dependencies
+      #   run: >-
+      #     python3 -m
+      #     pip install
+      #     .[development]
+
       - name: Run tests with coverage
         run: >-
           python3 -m
-          pytest
+          pytest packages
           --cov=q8s
           --cov-report=xml
       - name: Upload coverage to Codecov
@@ -62,13 +83,13 @@ jobs:
           build
           --user
       - name: Build a binary wheel and a source tarball
+        working-directory: packages/q8s
         run: python3 -m build
       - name: Store the distribution packages
         uses: actions/upload-artifact@v4
         with:
           name: python-package-distributions
-          path: dist/
-
+          path: packages/q8s/dist/
   publish-to-pypi:
     name: >-
       Publish Python 🐍 distribution 📦 to PyPI
