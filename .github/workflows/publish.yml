@@ -1,8 +1,54 @@
+# Copyright 2024-2026 Qubernetes
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 name: Publish Python 🐍 distribution 📦 to PyPI and TestPyPI
 
-on: push
+on:
+  push:
+    branches: ["**"]
+    tags:
+      - "q8s-v*"
+      - "q8s-cuda-v*"
+      - "q8s-hpc-cpu-v*"
+      - "q8s-hpc-rocm-v*"
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  release-package:
+    name: Validate release tag
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    outputs:
+      package: ${{ steps.release.outputs.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Match tag to package metadata
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python scripts/validate-release-tag.py
+
   test:
     name: Run tests 🧪
     runs-on: [ubuntu-latest]
@@ -24,15 +70,30 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
+
+      - name: Install q8s
+        working-directory: packages/q8s
         run: >-
           python3 -m
           pip install
           .[development]
+
+      - name: Install q8s-cuda
+        working-directory: packages/q8s-cuda
+        run: pip install .
+
+      - name: Install q8s-hpc-cpu
+        working-directory: packages/q8s-hpc-cpu
+        run: pip install .
+
+      - name: Install q8s-hpc-rocm
+        working-directory: packages/q8s-hpc-rocm
+        run: pip install .
+
       - name: Run tests with coverage
         run: >-
           python3 -m
-          pytest
+          pytest packages
           --cov=q8s
           --cov-report=xml
       - name: Upload coverage to Codecov
@@ -44,7 +105,11 @@ jobs:
           fail_ci_if_error: true
 
   build:
-    name: Build distribution 📦
+    name: Build ${{ matrix.package }} distribution 📦
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [q8s, q8s-cuda, q8s-hpc-cpu, q8s-hpc-rocm]
     needs:
       - test
     runs-on: ubuntu-latest
@@ -55,30 +120,36 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-      - name: Install pypa/build
+      - name: Install build tools
         run: >-
           python3 -m
           pip install
-          build
+          build twine
           --user
       - name: Build a binary wheel and a source tarball
+        working-directory: packages/${{ matrix.package }}
         run: python3 -m build
+      - name: Validate distribution metadata
+        working-directory: packages/${{ matrix.package }}
+        run: python3 -m twine check --strict dist/*
       - name: Store the distribution packages
         uses: actions/upload-artifact@v4
         with:
-          name: python-package-distributions
-          path: dist/
+          name: distributions-${{ matrix.package }}
+          path: packages/${{ matrix.package }}/dist/
+          if-no-files-found: error
 
   publish-to-pypi:
     name: >-
       Publish Python 🐍 distribution 📦 to PyPI
-    if: startsWith(github.ref, 'refs/tags/') # only publish to PyPI on tag pushes
+    if: startsWith(github.ref, 'refs/tags/')
     needs:
       - build
+      - release-package
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/q8s # Replace <package-name> with your PyPI project name
+      url: https://pypi.org/p/${{ needs.release-package.outputs.package }}
     permissions:
       id-token: write # IMPORTANT: mandatory for trusted publishing
 
@@ -86,10 +157,12 @@ jobs:
       - name: Download all the dists
         uses: actions/download-artifact@v4
         with:
-          name: python-package-distributions
+          name: distributions-${{ needs.release-package.outputs.package }}
           path: dist/
       - name: Publish distribution 📦 to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
 
   github-release:
     name: >-
@@ -97,6 +170,7 @@ jobs:
       and upload them to GitHub Release
     needs:
       - publish-to-pypi
+      - release-package
     runs-on: ubuntu-latest
 
     permissions:
@@ -107,7 +181,7 @@ jobs:
       - name: Download all the dists
         uses: actions/download-artifact@v4
         with:
-          name: python-package-distributions
+          name: distributions-${{ needs.release-package.outputs.package }}
           path: dist/
       - name: Sign the dists with Sigstore
         uses: sigstore/gh-action-sigstore-python@v3.0.0
@@ -115,34 +189,31 @@ jobs:
           inputs: >-
             ./dist/*.tar.gz
             ./dist/*.whl
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create
-          '${{ github.ref_name }}'
-          --repo '${{ github.repository }}'
-          --notes ""
-      - name: Upload artifact signatures to GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        # Upload to GitHub Release using the `gh` CLI.
-        # `dist/` contains the built packages, and the
-        # sigstore-produced signatures and certificates.
-        run: >-
-          gh release upload
-          '${{ github.ref_name }}' dist/**
-          --repo '${{ github.repository }}'
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --notes ""
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber
 
   publish-to-testpypi:
-    name: Publish Python 🐍 distribution 📦 to TestPyPI
+    name: Publish ${{ matrix.package }} to TestPyPI
+    if: github.event_name == 'push' && github.ref_type == 'branch'
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [q8s, q8s-cuda, q8s-hpc-cpu, q8s-hpc-rocm]
     needs:
       - build
     runs-on: ubuntu-latest
 
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/q8s
+      url: https://test.pypi.org/p/${{ matrix.package }}
 
     permissions:
       id-token: write # IMPORTANT: mandatory for trusted publishing
@@ -151,7 +222,7 @@ jobs:
       - name: Download all the dists
         uses: actions/download-artifact@v4
         with:
-          name: python-package-distributions
+          name: distributions-${{ matrix.package }}
           path: dist/
       - name: Publish distribution 📦 to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1

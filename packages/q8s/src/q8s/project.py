@@ -1,0 +1,520 @@
+import configparser
+import json
+import selectors
+import sys
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from importlib.metadata import entry_points
+from io import StringIO
+from os.path import join
+from pathlib import Path
+from subprocess import PIPE, STDOUT, Popen
+from typing import List, Optional
+
+import yaml
+from dacite import from_dict
+from q8s.bakefile import Bakefile, BuildPlatform
+from q8s.constants import WORKSPACE
+from q8s.plugins.utils.git_info import get_git_info
+from q8s.targets import get_available_targets
+from rich.progress import Progress
+
+
+def load(path: str):
+    """
+    Load the project configuration from the Q8Sproject file
+    """
+    with open(join(path, "Q8Sproject"), "r") as f:
+        return yaml.safe_load(f)
+
+
+def rmdir(directory):
+    """
+    Recursively remove a directory and its contents
+    """
+    directory = Path(directory)
+
+    for item in directory.iterdir():
+        if item.is_dir():
+            rmdir(item)
+        else:
+            item.unlink()
+
+    directory.rmdir()
+
+
+def _read_stream_lines(stream, progress, silent, is_error: bool = False):
+    """
+    Helper to read from a stream line by line (testable without subprocess).
+    """
+    while True:
+        line = stream.readline()
+        if line == "":
+            break
+        if not silent:
+            if is_error:
+                progress.console.print(f"[red]{line}[/red]", end="")
+            else:
+                progress.console.print(line, end="")
+
+
+def _handle_subprocess_output(process, progress, silent):
+    """
+    Read subprocess stdout and stderr line by line (Windows-safe).
+    """
+    if process.stdout:
+        _read_stream_lines(process.stdout, progress, silent)
+        process.stdout.close()
+
+    if process.stderr:
+        _read_stream_lines(process.stderr, progress, silent, is_error=True)
+        process.stderr.close()
+
+    process.wait()
+
+
+@dataclass
+class Q8SPythonEnv:
+    dependencies: List[str]
+    python_version: str = "3.12"
+
+
+@dataclass
+class Q8STarget:
+    python_env: Q8SPythonEnv
+
+
+# @dataclass
+# class Q8STargets:
+#     cpu: Optional[Q8STarget]
+#     gpu: Optional[Q8STarget]
+#     qpu: Optional[Q8STarget]
+#     hpc: Optional[Q8STarget]
+
+#     def keys(self):
+#         return [
+#             key
+#             for key in self.__dataclass_fields__.keys()
+#             if getattr(self, key) is not None
+#         ]
+
+
+@dataclass
+class Q8SDocker:
+    username: str
+    registry: Optional[str]
+
+
+@dataclass
+class Q8SProject:
+    name: str
+    python_env: Q8SPythonEnv
+    targets: dict[str, Q8STarget]
+    docker: Q8SDocker
+    kubeconfig: str
+
+
+class CacheNotBuiltException(Exception):
+    pass
+
+
+class ProjectNotFoundException(Exception):
+    pass
+
+
+class ProjectInvalidConfigurationException(Exception):
+    pass
+
+
+class Project:
+    name: str
+    __path: str
+    configuration: Q8SProject
+    __images: dict
+
+    def __init__(self, path: str = Path.cwd()):
+        try:
+            configuration = from_dict(data_class=Q8SProject, data=load(path=path))
+        except FileNotFoundError:
+            raise ProjectNotFoundException(
+                "Q8Sproject file not found in current folder"
+            )
+
+        self.configuration = configuration
+        self.name = self.configuration.name
+        self.__path = path
+
+        self.load_images_cache()
+
+    @property
+    def kubeconfig(self):
+        return Path(self.configuration.kubeconfig)
+
+    @property
+    def __git_info(self):
+        if not hasattr(self, "_git_info_cache"):
+            self._git_info_cache = get_git_info(self.__path)
+        return self._git_info_cache
+
+    def init_cache(self):
+        """
+        Initialize the cache directory
+        """
+        cachepath = join(self.__path, ".q8s_cache")
+        Path(cachepath).mkdir(exist_ok=True)
+
+        for target in self.configuration.targets.keys():
+            Path(join(self.__path, ".q8s_cache", target)).mkdir(exist_ok=True)
+
+            with open(join(cachepath, target, "requirements.txt"), "w") as f:
+                self.__create_requirements_txt(target, f)
+
+            with open(join(cachepath, target, "Dockerfile"), "w") as f:
+                self.__create_dockerfile(target, f)
+
+        with open(join(cachepath, "docker-bake.json"), "w") as f:
+            self.___create_bakefile(f)
+
+    def check_cache(self):
+        result = True
+
+        for target in self.configuration.targets.keys():
+            result = self.__check_cache_file(target, "requirements.txt") and result
+
+        return result
+
+    def load_images_cache(self):
+        cachepath = join(self.__path, ".q8s_cache", "images")
+
+        if Path(cachepath).exists() is False:
+            self.__images = {}
+        else:
+            with open(cachepath, "r") as f:
+                self.__images = yaml.safe_load(f)
+
+    def cached_images(self, target: str) -> str:
+        """
+        Get the cached images
+        """
+        cachepath = join(self.__path, ".q8s_cache", "images")
+
+        if Path(cachepath).exists() is False:
+            raise CacheNotBuiltException(
+                "Images cache not found, build the images first"
+            )
+
+        with open(cachepath, "r") as f:
+            images = yaml.safe_load(f)
+
+        key = target
+
+        return images[key]
+
+    def _get_plugin_for_target(self, target: str):
+        for ep in entry_points(group="q8s.targets"):
+            try:
+                plugin_cls = ep.load()
+                plugin = plugin_cls()
+
+                if hasattr(plugin, "target_name"):
+                    if plugin.target_name == target:
+                        return plugin
+
+            except Exception as e:
+                print(f"Failed to load plugin {ep.name}: {e}")
+
+        return None
+
+    def build_container(
+        self, target: str, progress: Progress, silent: bool, push: bool = True
+    ):
+        """
+        Build the container image
+        """
+        targetpath = join(self.__path, ".q8s_cache", target)
+
+        task = progress.add_task(
+            description=f"[cyan]Building container for {target}...", total=1
+        )
+
+        # start the docker build command in subprocess and capture the output
+        build_process = Popen(
+            [
+                "docker",
+                "build",
+                "--progress",
+                "plain",
+                "--platform",
+                "linux/amd64",
+                "--tag",
+                self.__image_name(target),
+                targetpath,
+            ],
+            stdout=PIPE,
+            stderr=STDOUT,
+            bufsize=1,
+            universal_newlines=True,
+            encoding="utf-8",  # force UTF-8 decoding
+            errors="replace",  # avoid crashing on bad bytes
+        )
+
+        if sys.platform == "win32":
+            # Windows-safe: read line by line instead of using selectors
+            _handle_subprocess_output(build_process, progress, silent)
+        else:
+
+            def handle_output(stream, mask):
+                # Because the process' output is line buffered, there's only ever one
+                # line to read when this function is called
+                line = stream.readline()
+                if not silent:
+                    progress.console.print(line, end="")
+
+            # Register callback for an "available for read" event from subprocess' stdout stream
+            selector = selectors.DefaultSelector()
+            selector.register(build_process.stdout, selectors.EVENT_READ, handle_output)
+
+            # Loop until subprocess is terminated
+            while build_process.poll() is None:
+                # Wait for events and handle them with their registered callbacks
+                events = selector.select()
+                for key, mask in events:
+                    callback = key.data
+                    callback(key.fileobj, mask)
+
+            selector.close()
+
+        if build_process.returncode != 0:
+            progress.advance(task)
+            raise Exception("Failed to build the container")
+        else:
+            progress.console.print(f"Container {self.__image_name(target)} built")
+            progress.advance(task, 1)
+
+        if push:
+            self.push_container(target, progress, silent)
+
+        self.__images[target] = self.__image_name(target)
+
+    def push_container(self, target: str, progress: Progress, silent: bool):
+        """
+        Push the container image to the registry
+        """
+        task = progress.add_task(
+            description=f"[cyan]Pushing container for {target}...", total=1
+        )
+
+        push_process = Popen(
+            ["docker", "push", self.__image_name(target)],
+            stdout=PIPE,
+            stderr=STDOUT,
+            bufsize=1,
+            universal_newlines=True,
+            encoding="utf-8",  # force UTF-8 decoding
+            errors="replace",  # avoid crashing on bad bytes
+        )
+
+        if sys.platform == "win32":
+            # Windows-safe: read line by line instead of using selectors
+            _handle_subprocess_output(push_process, progress, silent)
+
+        else:
+
+            def handle_output(stream, mask):
+                # Because the process' output is line buffered, there's only ever one
+                # line to read when this function is called
+                line = stream.readline()
+                if not silent:
+                    progress.console.print(line, end="")
+
+            # Register callback for an "available for read" event from subprocess' stdout stream
+            selector = selectors.DefaultSelector()
+            selector.register(push_process.stdout, selectors.EVENT_READ, handle_output)
+
+            # Loop until subprocess is terminated
+            while push_process.poll() is None:
+                # Wait for events and handle them with their registered callbacks
+                events = selector.select()
+                for key, mask in events:
+                    callback = key.data
+                    callback(key.fileobj, mask)
+
+            selector.close()
+
+        if push_process.returncode != 0:
+            progress.advance(task)
+            raise Exception("Failed to push the container")
+        else:
+            progress.advance(task)
+
+    def images_from_ci(self):
+        """
+        Images are build in a CI pipeline.
+        """
+        for target in self.configuration.targets.keys():
+            self.__images[target] = self.__image_name(target)
+
+    def update_images_cache(self):
+        """
+        Update the images cache
+        """
+        with open(join(self.__path, ".q8s_cache", "images"), "w") as f:
+            print("# This file is autogenerated by q8sctl\n", file=f)
+            yaml.dump(self.__images, f)
+
+    def clear_cache(self):
+        """
+        Clear the cache directory
+        """
+        cachepath = join(self.__path, ".q8s_cache")
+        rmdir(cachepath)
+
+    def __docker_login(self) -> str:
+        return self.configuration.docker.username
+
+    def __image_name(self, target: str):
+        registry = self.configuration.docker.registry
+        username = self.__docker_login().lower()
+
+        tag = None
+
+        # Build image name based on available information
+        if registry and username:
+            # Both registry and username present: registry/username/image:tag
+            tag = f"{registry}/{username}/q8s-{self.name.lower()}:{target}"
+        elif username:
+            # Only username present: username/image:tag
+            tag = f"{username}/q8s-{self.name.lower()}:{target}"
+        else:
+            # Neither present: image:tag
+            raise ProjectInvalidConfigurationException(
+                "Docker username and/or registry must be specified in the project configuration"
+            )
+
+        git_info = self.__git_info
+
+        if git_info.branch is not None:
+            sanitized_branch = "".join(
+                c if (c.isalnum() or c in "._-") else "-"
+                for c in git_info.branch.lower()
+            ).strip(".-")
+
+            tag += f"-{sanitized_branch}"
+
+        return tag
+
+    def __check_cache_file(self, target: str, file: str):
+        cachepath = join(self.__path, ".q8s_cache", target, file)
+        if Path(cachepath).exists() is False:
+            print(f"Cache file {cachepath} does not exist")
+            return False
+
+        file = StringIO()
+        self.__create_requirements_txt(target, file)
+
+        with open(cachepath, "r") as f:
+            if file.getvalue() != f.read():
+                print(f"Cache file {cachepath} is outdated")
+                return False
+
+        return True
+
+    def __create_requirements_txt(self, target: str, f):
+        print("# This file is autogenerated by q8sctl", file=f)
+        print("# Do not edit manually", file=f)
+
+        print("\n# Common dependencies:", file=f)
+
+        for dep in self.configuration.python_env.dependencies:
+            print(f"{dep}", file=f)
+
+        print("\n# Target specific dependencies:", file=f)
+
+        for dep in self.__get_target(target=target).python_env.dependencies:
+            print(f"{dep}", file=f)
+
+    def ___create_bakefile(self, f):
+        bakefile = Bakefile()
+
+        for target in self.configuration.targets.keys():
+            bakefile.add_target(
+                name=target,
+                tags=[self.__image_name(target)],
+                platforms=[BuildPlatform.linux_amd64],
+            )
+
+        json.dump(asdict(bakefile), f, indent=2)
+
+    def __create_dockerfile(self, target: str, f):
+
+        print("# This file is autogenerated by q8sctl", file=f)
+        print("# Do not edit manually\n", file=f)
+
+        plugin = self._get_plugin_for_target(target)
+        available = get_available_targets()
+
+        if target == "gpu":
+            print("# Base image specifications are available at:", file=f)
+            print("# https://github.com/qubernetes-dev/images/tree/main/cuda", file=f)
+
+        if plugin is None:
+            if target == "qpu":
+                base_image = (
+                    f"python:{self.configuration.python_env.python_version}-slim"
+                )
+            else:
+                raise ValueError(
+                    f"No plugin found for target '{target}'. "
+                    f"Available plugin targets: {available}"
+                )
+        else:
+            base_image = plugin.get_base_image(
+                self.configuration.python_env.python_version
+            )
+
+        print(f"FROM {base_image}", file=f)
+
+        print("", file=f)
+
+        print(
+            f"LABEL org.opencontainers.image.created={datetime.now().isoformat()}",
+            file=f,
+        )
+        print(f"LABEL org.opencontainers.image.title={self.name}", file=f)
+
+        url = self.__get_project_url()
+
+        if url is not None:
+            print(
+                f"LABEL org.opencontainers.image.source={url.strip()}",
+                file=f,
+            )
+
+        print("", file=f)
+
+        print(f"WORKDIR {WORKSPACE}", file=f)
+        print("COPY requirements.txt .", file=f)
+        print("RUN pip install --no-cache -r requirements.txt", file=f)
+
+    def __get_target(self, target: str) -> Q8STarget:
+        if target not in self.configuration.targets:
+            raise ValueError(f"Target '{target}' not found in Q8Sproject")
+
+        return self.configuration.targets[target]
+
+    def __get_project_url(self) -> Optional[str]:
+        """
+        Get the project URL from setup.cfg if available
+        """
+        cfg_path = Path(self.__path) / "setup.cfg"
+        if not cfg_path.exists():
+            return None
+
+        config = configparser.ConfigParser()
+        config.read(cfg_path)
+
+        url = config.get("metadata", "url", fallback=None)
+        if url is not None:
+            return url.strip()
+
+        return None

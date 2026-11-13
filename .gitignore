@@ -7,6 +7,9 @@ __pycache__/
 *.pyo
 *.pyd
 *.pyc.so
+dist/
+*.whl
+*.tar.gz
 
 # Ignore Jupyter Notebook checkpoints
 .ipynb_checkpoints/
@@ -46,3 +49,5 @@ htmlcov/
 playground/
 benchmark/
 paper-benchmarks/
+
+.q8s_cache/
