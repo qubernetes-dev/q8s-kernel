@@ -49,3 +49,5 @@ htmlcov/
 playground/
 benchmark/
 paper-benchmarks/
+
+.q8s_cache/

@@ -92,3 +92,38 @@ If the project is installed in a virtual environment, the `q8s-kernel` can be in
 ```bash
 q8sctl jupyter --install
 ```
+
+### Publishing packages
+
+Each package has its own version in `packages/<package>/pyproject.toml` and
+is released with a tag named `<package>-v<version>`:
+
+| Package | Example tag |
+| --- | --- |
+| `q8s` | `q8s-v0.14.0` |
+| `q8s-cuda` | `q8s-cuda-v0.1.0` |
+| `q8s-hpc-cpu` | `q8s-hpc-cpu-v0.1.0` |
+| `q8s-hpc-rocm` | `q8s-hpc-rocm-v0.1.0` |
+
+Before the first release of each plugin, register a pending Trusted Publisher
+at <https://pypi.org/manage/account/publishing/> using the package name, this
+repository's GitHub owner and name, workflow filename `publish.yml`, and
+environment `pypi`. Keep the existing publisher configuration for `q8s`.
+
+To release, update the selected package's version, merge the change, and push
+the matching tag. For example, to publish `q8s-cuda` version `0.1.0`:
+
+```bash
+git tag q8s-cuda-v0.1.0
+git push origin q8s-cuda-v0.1.0
+```
+
+The workflow verifies that the tag matches the package metadata, tests all
+packages, and builds and checks each package's wheel and source archive. It
+publishes only the tagged package to PyPI and attaches its signed distributions
+to a GitHub release. Legacy tags such as `v0.14.0` do not trigger publication.
+When a plugin requires a new core version, publish `q8s` first.
+
+Pull requests run tests and builds without publishing. Branch pushes also
+publish the core `q8s` package to TestPyPI using the existing `testpypi`
+environment; plugins do not require TestPyPI configuration.
