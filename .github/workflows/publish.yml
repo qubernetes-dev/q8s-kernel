@@ -201,15 +201,19 @@ jobs:
           gh release upload "$RELEASE_TAG" dist/* --clobber
 
   publish-to-testpypi:
-    name: Publish q8s to TestPyPI
+    name: Publish ${{ matrix.package }} to TestPyPI
     if: github.event_name == 'push' && github.ref_type == 'branch'
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [q8s, q8s-cuda, q8s-hpc-cpu, q8s-hpc-rocm]
     needs:
       - build
     runs-on: ubuntu-latest
 
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/q8s
+      url: https://test.pypi.org/p/${{ matrix.package }}
 
     permissions:
       id-token: write # IMPORTANT: mandatory for trusted publishing
@@ -218,7 +222,7 @@ jobs:
       - name: Download all the dists
         uses: actions/download-artifact@v4
         with:
-          name: distributions-q8s
+          name: distributions-${{ matrix.package }}
           path: dist/
       - name: Publish distribution 📦 to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1

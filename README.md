@@ -125,5 +125,9 @@ to a GitHub release. Legacy tags such as `v0.14.0` do not trigger publication.
 When a plugin requires a new core version, publish `q8s` first.
 
 Pull requests run tests and builds without publishing. Branch pushes also
-publish the core `q8s` package to TestPyPI using the existing `testpypi`
-environment; plugins do not require TestPyPI configuration.
+publish all four packages to TestPyPI using the existing `testpypi`
+environment, skipping distributions that have already been uploaded. Before
+the first plugin upload, register a pending Trusted Publisher for each plugin
+at <https://test.pypi.org/manage/account/publishing/> with the same GitHub
+owner, repository, and workflow filename, but environment `testpypi`.
+Keep the existing TestPyPI publisher configuration for `q8s`.
