@@ -118,6 +118,10 @@ git tag q8s-cuda-v0.1.0
 git push origin q8s-cuda-v0.1.0
 ```
 
+Push release tags individually. GitHub does not trigger tag-push workflows
+when more than three tags are pushed at once, so avoid `git push --tags`
+when releasing all four packages together.
+
 The workflow verifies that the tag matches the package metadata, tests all
 packages, and builds and checks each package's wheel and source archive. It
 publishes only the tagged package to PyPI and attaches its signed distributions

@@ -1,3 +1,17 @@
+# Copyright 2024-2026 Qubernetes
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import importlib
 import sys
 from pathlib import Path
@@ -14,6 +28,9 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from typing_extensions import Annotated
 
 app = typer.Typer()
+TARGET_HELP = (
+    f"Execution target. Available targets: {', '.join(get_available_targets())}"
+)
 
 
 @app.command(
@@ -40,9 +57,7 @@ def init(
 @app.command()
 def build(
     init: Annotated[bool, typer.Option(help="Initialize project")] = False,
-    target: Annotated[
-        str, typer.Option(help="Execution target", case_sensitive=False)
-    ] = None,
+    target: Annotated[str, typer.Option(help=TARGET_HELP, case_sensitive=False)] = None,
     dry_run: Annotated[
         bool, typer.Option(help="Dry run does not push images to the registry")
     ] = False,
@@ -118,7 +133,11 @@ def build(
 def execute(
     file: Annotated[Path, typer.Argument(help="Python file to be executed")],
     target: Annotated[
-        str, typer.Option(help="Execution target", case_sensitive=False)
+        str,
+        typer.Option(
+            help=TARGET_HELP,
+            case_sensitive=False,
+        ),
     ] = "cpu",
     kubeconfig: Annotated[
         Path, typer.Option(help="Kubernetes configuration", envvar="KUBECONFIG")
@@ -144,6 +163,14 @@ def execute(
     args: Annotated[list[str], typer.Argument(help="Additional arguments")] = None,
 ):
     project = Project()
+
+    if target not in project.configuration.targets:
+        available = ", ".join(project.configuration.targets)
+        typer.echo(
+            f"Target '{target}' not found in Q8Sproject. "
+            f"Configured targets: {available}"
+        )
+        raise typer.Exit(code=1)
 
     if kubeconfig is None:
         kubeconfig = project.kubeconfig
@@ -201,7 +228,7 @@ def jupyter(
         ),
     ] = False,
     target: Annotated[
-        str, typer.Option(help="Execution target", case_sensitive=False)
+        str, typer.Option(help=TARGET_HELP, case_sensitive=False)
     ] = "cpu",
     kubeconfig: Annotated[
         Path, typer.Option(help="Kubernetes configuration", envvar="KUBECONFIG")
