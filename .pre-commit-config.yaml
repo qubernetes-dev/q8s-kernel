@@ -87,3 +87,4 @@ repos:
   - id: addlicense
     args: [ "-c", "Qubernetes", "-y", "2024-2026", "-l", "apache", "packages/**/.*py" ]
     # files: ^packages/[^/]+/(src|tests)/.*\.py$
+    exclude: '(^|/)pyproject\.toml$'
