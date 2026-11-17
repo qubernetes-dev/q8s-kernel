@@ -1,9 +1,6 @@
 # q8s
 
-[![PyPI version](https://img.shields.io/pypi/v/q8s.svg)](https://pypi.org/project/q8s/)
-[![Python versions](https://img.shields.io/pypi/pyversions/q8s.svg)](https://pypi.org/project/q8s/)
-[![codecov](https://codecov.io/github/qubernetes-dev/q8s-kernel/graph/badge.svg?token=5JQ4ALSUZJ)](https://codecov.io/github/qubernetes-dev/q8s-kernel)
-[![PyPI Downloads](https://static.pepy.tech/personalized-badge/q8s?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/q8s)
+[![PyPI version](https://img.shields.io/pypi/v/q8s.svg)](https://pypi.org/project/q8s/) [![Python versions](https://img.shields.io/pypi/pyversions/q8s.svg)](https://pypi.org/project/q8s/) [![codecov](https://codecov.io/github/qubernetes-dev/q8s-kernel/graph/badge.svg?token=5JQ4ALSUZJ)](https://codecov.io/github/qubernetes-dev/q8s-kernel) [![PyPI Downloads](https://static.pepy.tech/personalized-badge/q8s?period=total&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/q8s)
 
 Toolset for executing quantum jobs on [Qubernetes](https://www.qubernetes.dev).
 
@@ -65,13 +62,13 @@ Select the `Q8s kernel` when creating a new notebook.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, pre-commit
-checks, and pull request guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, pre-commit checks, and pull request guidelines.
+
+The [development process](doc/development-process.md) explains how issues, specifications, architecture decisions, implementation, review, and releases fit together.
 
 ## Publishing packages
 
-Each package has its own version in `packages/<package>/pyproject.toml` and
-is released with a tag named `<package>-v<version>`:
+Each package has its own version in `packages/<package>/pyproject.toml` and is released with a tag named `<package>-v<version>`:
 
 | Package | Example tag |
 | --- | --- |
@@ -80,33 +77,17 @@ is released with a tag named `<package>-v<version>`:
 | `q8s-hpc-cpu` | `q8s-hpc-cpu-v0.1.0` |
 | `q8s-hpc-rocm` | `q8s-hpc-rocm-v0.1.0` |
 
-Before the first release of each plugin, register a pending Trusted Publisher
-at <https://pypi.org/manage/account/publishing/> using the package name, this
-repository's GitHub owner and name, workflow filename `publish.yml`, and
-environment `pypi`. Keep the existing publisher configuration for `q8s`.
+Before the first release of each plugin, register a pending Trusted Publisher at <https://pypi.org/manage/account/publishing/> using the package name, this repository's GitHub owner and name, workflow filename `publish.yml`, and environment `pypi`. Keep the existing publisher configuration for `q8s`.
 
-To release, update the selected package's version, merge the change, and push
-the matching tag. For example, to publish `q8s-cuda` version `0.1.0`:
+To release, update the selected package's version, merge the change, and push the matching tag. For example, to publish `q8s-cuda` version `0.1.0`:
 
 ```bash
 git tag q8s-cuda-v0.1.0
 git push origin q8s-cuda-v0.1.0
 ```
 
-Push release tags individually. GitHub does not trigger tag-push workflows
-when more than three tags are pushed at once, so avoid `git push --tags`
-when releasing all four packages together.
+Push release tags individually. GitHub does not trigger tag-push workflows when more than three tags are pushed at once, so avoid `git push --tags` when releasing all four packages together.
 
-The workflow verifies that the tag matches the package metadata, tests all
-packages, and builds and checks each package's wheel and source archive. It
-publishes only the tagged package to PyPI and attaches its signed distributions
-to a GitHub release. Legacy tags such as `v0.14.0` do not trigger publication.
-When a plugin requires a new core version, publish `q8s` first.
+The workflow verifies that the tag matches the package metadata, tests all packages, and builds and checks each package's wheel and source archive. It publishes only the tagged package to PyPI and attaches its signed distributions to a GitHub release. Legacy tags such as `v0.14.0` do not trigger publication. When a plugin requires a new core version, publish `q8s` first.
 
-Pull requests run tests and builds without publishing. Branch pushes also
-publish all four packages to TestPyPI using the existing `testpypi`
-environment, skipping distributions that have already been uploaded. Before
-the first plugin upload, register a pending Trusted Publisher for each plugin
-at <https://test.pypi.org/manage/account/publishing/> with the same GitHub
-owner, repository, and workflow filename, but environment `testpypi`.
-Keep the existing TestPyPI publisher configuration for `q8s`.
+Pull requests run tests and builds without publishing. Branch pushes also publish all four packages to TestPyPI using the existing `testpypi` environment, skipping distributions that have already been uploaded. Before the first plugin upload, register a pending Trusted Publisher for each plugin at <https://test.pypi.org/manage/account/publishing/> with the same GitHub owner, repository, and workflow filename, but environment `testpypi`. Keep the existing TestPyPI publisher configuration for `q8s`.
