@@ -63,37 +63,12 @@ jupyter lab
 
 Select the `Q8s kernel` when creating a new notebook.
 
-## Development
+## Contributing
 
-### Prerequisites
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, pre-commit
+checks, and pull request guidelines.
 
-The development environment requires the following tools to be installed:
-
-* [Docker](https://www.docker.com/get-started)
-
-### Setup
-
-Install the core package in editable mode:
-
-```bash
-pip install -e packages/q8s
-```
-
-Install plugin packages in editable mode as needed:
-
-```bash
-pip install -e packages/q8s-cuda
-pip install -e packages/q8s-hpc-cpu
-pip install -e packages/q8s-hpc-rocm
-```
-
-If the project is installed in a virtual environment, the `q8s-kernel` can be installed by running the following command:
-
-```bash
-q8sctl jupyter --install
-```
-
-### Publishing packages
+## Publishing packages
 
 Each package has its own version in `packages/<package>/pyproject.toml` and
 is released with a tag named `<package>-v<version>`:
