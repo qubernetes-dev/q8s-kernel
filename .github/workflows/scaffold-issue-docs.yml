@@ -1,0 +1,53 @@
+# Copyright 2024-2026 Qubernetes
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Scaffold issue specifications and ADRs
+
+on:
+  issues:
+    types: [opened, labeled, reopened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Issue number to scaffold or retry
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Serialize ADR number allocation across issue branches.
+concurrency:
+  group: scaffold-issue-docs
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  scaffold:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.action != 'labeled' ||
+      github.event.label.name == 'needs-spec' ||
+      github.event.label.name == 'needs-adr'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Scaffold documents and open or reuse a draft pull request
+        uses: qubernetes-dev/sdlc-action@61c63a63148dd3a954d2b289d907a7f668d04941
+        with:
+          operation: scaffold
+          issue-number: ${{ github.event.inputs.issue_number || '' }}
