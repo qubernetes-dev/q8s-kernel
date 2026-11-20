@@ -49,7 +49,7 @@ Each package has its own `pyproject.toml`, `src/`, and `tests/`. Put source chan
 
 Execution target plugins are discovered through the `q8s.targets` Python entry point group. Use the existing plugin packages and the [plugin hook specification](packages/q8s/src/q8s/plugins/job_template_spec.py) as references when adding or changing a target.
 
-To scaffold documents from an issue, apply `needs-spec` or `needs-adr`. Both labels reuse the issue's linked branch, regardless of its name, and a shared draft PR. Create a branch from the issue's **Development** section first to use your preferred name; otherwise, the automation creates and links one. Complete the generated TODOs before implementation; see the [automation guide](.github/scripts/README.md#create-specifications-and-adrs-from-issue-labels).
+To scaffold documents from an issue, apply `needs-spec` or `needs-adr`. Both labels reuse the issue's linked branch, regardless of its name, and a shared draft PR. Create a branch from the issue's **Development** section first to use your preferred name; otherwise, the automation creates and links one. Complete the generated TODOs before implementation; see the [automation guide](https://github.com/qubernetes-dev/sdlc-action#operations).
 
 Read the relevant [architecture decisions](doc/adrs/) and [feature specifications](doc/specs/) before changing behavior. Update affected specifications and document significant architectural decisions in a new ADR, following the existing format. Update user documentation and examples when the CLI, configuration, or execution behavior changes.
 
@@ -121,7 +121,7 @@ Review the diff before submitting. Include relevant tests and documentation, and
 
 The [CI workflow](.github/workflows/publish.yml) tests all four packages across the supported Python versions, then builds and validates each package's wheel and source distribution. Pull requests do not publish packages. Address failed checks and review feedback before merging.
 
-Changes to documentation automation scripts, templates, tests, or their workflows also run the separate [documentation automation checks](.github/workflows/test-doc-automation.yml) on Python 3.10–3.13.
+Documentation automation is maintained and tested in the shared [SDLC action repository](https://github.com/qubernetes-dev/sdlc-action). This repository keeps only its caller workflows; update both pinned action references together when adopting a new version.
 
 ## Releases and licensing
 

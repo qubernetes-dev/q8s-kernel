@@ -46,17 +46,8 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      # Execute trusted automation and templates, never code from an issue branch.
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Test documentation automation
-        run: python -m unittest discover -s .github/scripts/tests -p 'test_*.py'
       - name: Scaffold documents and open or reuse a draft pull request
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: python .github/scripts/scaffold-issue-docs.py
+        uses: qubernetes-dev/sdlc-action@61c63a63148dd3a954d2b289d907a7f668d04941
+        with:
+          operation: scaffold
+          issue-number: ${{ github.event.inputs.issue_number || '' }}
