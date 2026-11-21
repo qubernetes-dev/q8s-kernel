@@ -1,3 +1,17 @@
+# Copyright 2024-2026 Qubernetes
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
 import os
 
@@ -7,7 +21,7 @@ from q8s.execution import K8sContext
 from q8s.project import Project
 from q8s.targets import get_available_targets
 from q8s.workload import Workload
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from q8s.workload_run import ProgressUpdate
 
 FORMAT = "[%(levelname)s %(asctime)-15s q8s_kernel] %(message)s"
 logging.basicConfig(level=logging.INFO, format=FORMAT)
@@ -49,13 +63,7 @@ class Q8sKernel(Kernel):
             exit(1)
 
         self.k8s_context = K8sContext(
-            kubeconfig,
-            self.progress,
-            Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                expand=True,
-            ),
+            kubeconfig, progress=self._report_workload_progress
         )
         self.k8s_context.set_registry_pat(os.environ.get("REGISTRY_PAT", None))
         self.k8s_context.set_container_image(self.docker_image)
@@ -140,6 +148,20 @@ class Q8sKernel(Kernel):
             "payload": [],
             "user_expressions": {},
         }
+
+    def _report_workload_progress(self, update: ProgressUpdate):
+        if update.status == "waiting":
+            self.progress(f"Job {update.job_name} created")
+            return
+
+        job_status = {
+            "scheduled": "Scheduled",
+            "running": "Running",
+            "complete": "Complete",
+            "job_failed": "Failed",
+        }.get(update.status)
+        if job_status is not None:
+            self.progress(f"Pod status: {job_status}")
 
     def progress(self, msg):
         self.send_response(

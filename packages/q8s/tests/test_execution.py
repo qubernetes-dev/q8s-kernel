@@ -1,31 +1,33 @@
+# Copyright 2024-2026 Qubernetes
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import requests
 from dxf.exceptions import DXFUnauthorizedError
+from kubernetes.client.exceptions import ApiException
 from q8s.execution import ContainerImageValidator, K8sContext
+from q8s.plugins.cpu_job import CPUJobTemplatePlugin
 from q8s.workload import Workload
+from q8s.workload_run import _WorkloadRun
 
 
 class MockResponse:
     def __init__(self, status_code):
         self.status_code = status_code
-
-
-class DummyWatch:
-    def __init__(self, events):
-        self.events = events
-        self.stopped = False
-
-    def stream(self, *args, **kwargs):
-        for event in self.events:
-            if self.stopped:
-                break
-            yield event
-
-    def stop(self):
-        self.stopped = True
 
 
 class TestContainerImageValidator(unittest.TestCase):
@@ -116,209 +118,358 @@ class TestContainerImageValidator(unittest.TestCase):
 
 
 class TestK8sContextExecuteWorkload(unittest.TestCase):
-    def _make_context(self):
-        ctx = K8sContext.__new__(K8sContext)
-        progress = Mock()
-        progress.console = Mock()
-        progress.add_task.return_value = "task-id"
-        ctx._K8sContext__progress = progress
-        ctx.jupyter_logger = Mock()
-        ctx.name = "qubernetes-job-test"
-        return ctx, progress
+    def setUp(self):
+        self.progress = Mock()
+        self.core, self.batch, self.watcher, self.manager = (Mock() for _ in range(4))
+        self.plugin = CPUJobTemplatePlugin()
+        self.hooks = self.manager.hook
+        self.hooks.makejob.side_effect = lambda **kwargs: [
+            self.plugin.makejob(**kwargs)
+        ]
+        self.events = [("MODIFIED", None, [("Complete", "True")])]
+        self.watcher.stream.side_effect = self._watch_events
 
-    def test_execute_workload_submit_false_returns_logs(self):
-        ctx, progress = self._make_context()
-        ctx._K8sContext__create_job_object_from_workload = Mock()
-        ctx._K8sContext__complete_and_get_job_status = Mock(return_value="stdout")
-        ctx._K8sContext__get_pods_in_job = Mock(return_value="pod-1")
-        ctx._K8sContext__get_job_logs = Mock(return_value="log output")
+        def create(*, body, namespace):
+            body.metadata.uid = f"{body.kind}-{body.metadata.name}"
+            return body
 
-        workload = Workload.from_code("print('hi')")
-        result = ctx.execute_workload(workload, submit=False)
+        self.batch.create_namespaced_job.side_effect = create
+        self.core.create_namespaced_config_map.side_effect = create
+        self.core.create_namespaced_secret.side_effect = create
+        self.batch.read_namespaced_job.side_effect = ApiException(status=404)
+        self.core.read_namespaced_config_map.side_effect = ApiException(status=404)
+        self.core.read_namespaced_secret.side_effect = ApiException(status=404)
+        self.core.list_namespaced_pod.return_value.items = [
+            SimpleNamespace(metadata=SimpleNamespace(name="pod-1"))
+        ]
+        self.core.read_namespaced_pod_log.return_value = "job logs"
 
-        self.assertEqual(result, ("log output", "stdout"))
-        ctx._K8sContext__create_job_object_from_workload.assert_called_once_with(
-            workload=workload
+        dependencies = {
+            "q8s.execution.config.load_kube_config": None,
+            "q8s.execution.config.list_kube_config_contexts": (
+                [],
+                {"context": {"namespace": "default"}},
+            ),
+            "q8s.execution.client.CoreV1Api": self.core,
+            "q8s.execution.client.BatchV1Api": self.batch,
+            "q8s.execution.entry_points": [],
+            "q8s.execution.load_env": {"WORKLOAD_ENV": "value"},
+            "q8s.workload_run.watch.Watch": self.watcher,
+        }
+        for path, value in dependencies.items():
+            dependency = patch(path, return_value=value)
+            dependency.start()
+            self.addCleanup(dependency.stop)
+        manager = patch.object(K8sContext, "jm", self.manager)
+        manager.start()
+        self.addCleanup(manager.stop)
+        self.context = K8sContext("test-config", progress=self.progress)
+        self.context.set_container_image("example/image")
+        self.workload = Workload.from_code("print('hi')")
+
+    def _job(self):
+        return self.batch.create_namespaced_job.call_args.kwargs["body"]
+
+    def _watch_events(self, *args, **kwargs):
+        for event_type, active, conditions in self.events:
+            yield {
+                "object": SimpleNamespace(
+                    metadata=self._job().metadata,
+                    status=SimpleNamespace(
+                        active=active,
+                        conditions=(
+                            None
+                            if conditions is None
+                            else [
+                                SimpleNamespace(type=kind, status=status)
+                                for kind, status in conditions
+                            ]
+                        ),
+                    ),
+                ),
+                "type": event_type,
+            }
+
+    def test_blocking_run_returns_logs(self):
+        self.assertEqual(
+            self.context.execute_workload(self.workload), ("job logs", "stdout")
         )
-        ctx._K8sContext__complete_and_get_job_status.assert_called_once_with(
-            execute_task="task-id"
+        job = self._job()
+        self.assertEqual(job.spec.ttl_seconds_after_finished, 100)
+        self.core.list_namespaced_pod.assert_called_once_with(
+            "default", label_selector=f"app={job.metadata.name}"
         )
-        ctx._K8sContext__get_job_logs.assert_called_once_with("pod-1")
-        progress.console.print.assert_called_once_with("Fetched job logs")
+        self.core.read_namespaced_pod_log.assert_called_once_with(
+            name="pod-1", namespace="default"
+        )
+        self.watcher.stop.assert_called_once()
+        self.batch.delete_namespaced_job.assert_not_called()
+        self.assertEqual(self.progress.call_args.args[0].status, "complete")
 
-    def test_execute_workload_submit_true_skips_wait(self):
-        ctx, progress = self._make_context()
-        ctx._K8sContext__create_job_object_from_workload = Mock()
-        ctx._K8sContext__complete_and_get_job_status = Mock()
+    def test_submit_only_returns_without_watching_or_deleting(self):
+        output, stream = self.context.execute_workload(self.workload, submit=True)
+        job = self._job()
+        self.assertEqual(
+            (output, stream),
+            (f"Job {job.metadata.name} submitted successfully.", "stdout"),
+        )
+        self.watcher.stream.assert_not_called()
+        self.core.read_namespaced_pod_log.assert_not_called()
+        self.batch.delete_namespaced_job.assert_not_called()
+        self.assertEqual(self.progress.call_args.args[0].status, "submitted")
 
-        workload = Workload.from_code("print('hi')")
-        result = ctx.execute_workload(workload, submit=True)
+    def test_failed_job_returns_logs_on_stderr(self):
+        self.events = [("MODIFIED", 0, [("Failed", "True"), ("FailureTarget", "True")])]
+        self.assertEqual(
+            self.context.execute_workload(self.workload), ("job logs", "stderr")
+        )
+        self.watcher.stop.assert_called_once()
+        self.assertEqual(self.progress.call_args.args[0].status, "job_failed")
+
+    def test_watch_ignores_unconfirmed_conditions_until_job_completes(self):
+        self.events = [
+            ("ADDED", None, None),
+            ("MODIFIED", None, []),
+            ("MODIFIED", None, [("Failed", "False"), ("Complete", "Unknown")]),
+            ("MODIFIED", 0, [("Complete", "True"), ("Suspended", "False")]),
+        ]
+        self.assertEqual(
+            self.context.execute_workload(self.workload), ("job logs", "stdout")
+        )
+        self.watcher.stop.assert_called_once()
+        self.assertEqual(self.progress.call_args.args[0].status, "complete")
+
+    def test_watch_exhaustion_reports_unknown_outcome_without_fetching_logs(self):
+        self.events = [("ADDED", 1, None), ("MODIFIED", 1, None)]
+        output, stream = self.context.execute_workload(self.workload)
+        job_name = self._job().metadata.name
+        self.assertEqual(
+            (output, stream),
+            (
+                f"Watch ended before Job {job_name} reached a terminal condition.",
+                "stderr",
+            ),
+        )
+        self.assertEqual(self.progress.call_args.args[0].job_name, job_name)
+        self.watcher.stop.assert_not_called()
+        self.core.list_namespaced_pod.assert_not_called()
+        self.core.read_namespaced_pod_log.assert_not_called()
+        self.batch.delete_namespaced_job.assert_not_called()
+        statuses = [call.args[0].status for call in self.progress.call_args_list]
+        self.assertEqual(statuses[-3:], ["scheduled", "running", "watch_ended"])
+
+    def test_job_outcome_is_reported_when_log_retrieval_fails(self):
+        self.core.read_namespaced_pod_log.side_effect = RuntimeError("logs unavailable")
+
+        output, stream = self.context.execute_workload(self.workload)
+        job_name = self._job().metadata.name
+
+        self.assertEqual(stream, "stderr")
+        self.assertEqual(
+            output,
+            f"Job {job_name} completed. Could not retrieve Pod logs: logs unavailable",
+        )
+        self.assertEqual(self.progress.call_args.args[0].status, "logs_unavailable")
+        self.batch.delete_namespaced_job.assert_not_called()
+
+    def test_submit_builds_a_valid_volume_name_from_the_run_name(self):
+        output, stream = self.context.execute_workload(self.workload, submit=True)
+        self.assertEqual(stream, "stdout", output)
+        job = self._job()
+        pod_spec = job.spec.template.spec
+        volume = pod_spec.volumes[0]
+        self.assertLessEqual(len(volume.name), 63)
+        self.assertRegex(volume.name, r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+        self.assertEqual(pod_spec.containers[0].volume_mounts[0].name, volume.name)
+        self.assertEqual(volume.config_map.name, job.metadata.name)
+
+    def test_run_uses_the_target_and_image_selected_at_start(self):
+        def change_selection(**kwargs):
+            self.context.set_target("gpu")
+            self.context.set_container_image("another/image")
+            self.context.set_registry_pat("new-token")
+
+        self.hooks.prepare.side_effect = change_selection
+        output, stream = self.context.execute_workload(self.workload, submit=True)
+
+        self.assertEqual(stream, "stdout", output)
+        self.assertEqual(self.hooks.makejob.call_args.kwargs["target"], "cpu")
+        self.assertEqual(
+            self.hooks.makejob.call_args.kwargs["container_image"], "example/image"
+        )
+        self.assertIsNone(self.hooks.makejob.call_args.kwargs["registry_pat"])
+        self.core.create_namespaced_secret.assert_called_once()
+
+    def test_partial_submission_reports_failures_and_cleanup_can_be_retried(self):
+        self.core.create_namespaced_secret.side_effect = RuntimeError(
+            "secret create failed"
+        )
+        self.core.delete_namespaced_config_map.side_effect = ApiException(status=403)
+        self.hooks.cleanup.side_effect = RuntimeError("plugin cleanup failed")
+        runs = []
+
+        def capture_run(**kwargs):
+            run = _WorkloadRun(**kwargs)
+            runs.append(run)
+            return run
+
+        with patch("q8s.execution._WorkloadRun", side_effect=capture_run):
+            output, stream = self.context.execute_workload(self.workload)
+
+        self.assertEqual(stream, "stderr")
+        self.assertTrue(
+            output.startswith("Workload submission failed: secret create failed")
+        )
+        job = self._job()
+        self.assertIn(f"ConfigMap default/{job.metadata.name}", output)
+        self.assertIn("Target cleanup hook: plugin cleanup failed", output)
+        delete = self.batch.delete_namespaced_job
+        delete.assert_called_once_with(job.metadata.name, "default", body=ANY)
+        options = delete.call_args.kwargs["body"]
+        self.assertEqual(options.preconditions.uid, job.metadata.uid)
+        self.assertEqual(options.propagation_policy, "Foreground")
+        self.core.delete_namespaced_secret.assert_not_called()
+
+        self.core.delete_namespaced_config_map.side_effect = ApiException(status=404)
+        self.hooks.cleanup.side_effect = None
+        self.assertEqual(runs[0]._cleanup(), [])
+        self.assertEqual(runs[0]._cleanup(), [])
+        delete.assert_called_once()
+        self.assertEqual(self.core.delete_namespaced_config_map.call_count, 2)
+        self.assertEqual(self.hooks.cleanup.call_count, 2)
+
+    def test_lost_create_response_requires_same_run_annotation_before_delete(self):
+        self.batch.create_namespaced_job.side_effect = TimeoutError(
+            "create response lost"
+        )
+        for same_run in (True, False):
+            with self.subTest(same_run=same_run):
+                self.batch.read_namespaced_job.reset_mock()
+                self.batch.delete_namespaced_job.reset_mock()
+
+                def read_job(name, namespace):
+                    metadata = self._job().metadata
+                    self.assertEqual(name, metadata.name)
+                    self.assertEqual(namespace, "default")
+                    annotations = (
+                        metadata.annotations
+                        if same_run
+                        else {"qubernetes.dev/run-id": "other"}
+                    )
+                    return SimpleNamespace(
+                        metadata=SimpleNamespace(
+                            uid="read-uid", annotations=annotations
+                        )
+                    )
+
+                read = self.batch.read_namespaced_job
+                read.side_effect = read_job
+                self.assertEqual(
+                    self.context.execute_workload(self.workload),
+                    ("Workload submission failed: create response lost", "stderr"),
+                )
+                read.assert_called_once()
+                delete = self.batch.delete_namespaced_job
+                if same_run:
+                    delete.assert_called_once()
+                    self.assertEqual(
+                        delete.call_args.kwargs["body"].preconditions.uid, "read-uid"
+                    )
+                else:
+                    delete.assert_not_called()
+
+    def test_job_creation_conflict_leaves_existing_job_alone(self):
+        self.batch.create_namespaced_job.side_effect = ApiException(status=409)
+
+        output, stream = self.context.execute_workload(self.workload)
+
+        self.assertEqual(stream, "stderr")
+        self.assertIn("409", output)
+        self.batch.read_namespaced_job.assert_not_called()
+        self.batch.delete_namespaced_job.assert_not_called()
+        self.core.create_namespaced_config_map.assert_not_called()
+
+    def test_interrupt_cleans_up_only_the_active_run(self):
+        self.context.set_registry_pat("test-token")
+        self.watcher.stream.side_effect = KeyboardInterrupt
+        self.assertEqual(
+            self.context.execute_workload(self.workload, submit=True)[1], "stdout"
+        )
+        submitted = self._job()
+        self.batch.delete_namespaced_job.assert_not_called()
+        self.core.delete_namespaced_secret.assert_not_called()
 
         self.assertEqual(
-            result, ("Job qubernetes-job-test submitted successfully.", "stdout")
+            self.context.execute_workload(self.workload),
+            ("Task interrupted by user", "stderr"),
         )
-        ctx._K8sContext__complete_and_get_job_status.assert_not_called()
-        progress.update.assert_called_once()
-        progress.advance.assert_called_once_with("task-id", 1)
 
-    def test_execute_workload_keyboard_interrupt_aborts(self):
-        ctx, _ = self._make_context()
-        ctx._K8sContext__create_job_object_from_workload = Mock(
-            side_effect=KeyboardInterrupt
+        interrupted = self._job()
+        self.assertNotEqual(submitted.metadata.name, interrupted.metadata.name)
+        self.batch.delete_namespaced_job.assert_called_once_with(
+            interrupted.metadata.name, "default", body=ANY
         )
-        ctx.abort = Mock()
-
-        workload = Workload.from_code("print('hi')")
-        result = ctx.execute_workload(workload, submit=False)
-
-        self.assertEqual(result, ("Task interrupted by user", "stderr"))
-        ctx.abort.assert_called_once()
-
-    def test_execute_workload_exception_returns_error(self):
-        ctx, _ = self._make_context()
-        ctx._K8sContext__create_job_object_from_workload = Mock(
-            side_effect=Exception("boom")
+        self.core.delete_namespaced_config_map.assert_called_once_with(
+            interrupted.metadata.name, "default", body=ANY
         )
-        ctx.abort = Mock()
-
-        workload = Workload.from_code("print('hi')")
-        result = ctx.execute_workload(workload, submit=False)
-
-        self.assertEqual(result, ("An error occurred.", "stderr"))
-        ctx.abort.assert_not_called()
-
-
-class TestK8sContextCompleteJobStatus(unittest.TestCase):
-    def _make_context(self):
-        ctx = K8sContext.__new__(K8sContext)
-        progress = Mock()
-        progress.console = Mock()
-        ctx._K8sContext__progress = progress
-        ctx.jupyter_logger = None
-        ctx.name = "qubernetes-job-test"
-        ctx.namespace = "default"
-        ctx.batch_api_instance = Mock()
-        return ctx, progress
-
-    def _make_event(self, name, active, condition_type, event_type="MODIFIED"):
-        conditions = []
-        if condition_type is not None:
-            conditions = [SimpleNamespace(type=condition_type)]
-        obj = SimpleNamespace(
-            metadata=SimpleNamespace(name=name),
-            status=SimpleNamespace(active=active, conditions=conditions),
-        )
-        return {"object": obj, "type": event_type}
-
-    def test_complete_and_get_job_status_failed_returns_stderr(self):
-        ctx, progress = self._make_context()
-        event = self._make_event(ctx.name, None, "Failed")
-        dummy_watch = DummyWatch([event])
-
-        with patch("q8s.execution.watch.Watch", return_value=dummy_watch):
-            result = ctx._K8sContext__complete_and_get_job_status(
-                execute_task="task-id"
-            )
-
-        self.assertEqual(result, "stderr")
-        self.assertTrue(dummy_watch.stopped)
-        progress.update.assert_called_once()
-        self.assertIn("Failed", progress.update.call_args.kwargs["description"])
-        progress.advance.assert_called_once_with("task-id", 1)
-
-    def test_complete_and_get_job_status_complete_returns_stdout(self):
-        ctx, progress = self._make_context()
-        event = self._make_event(ctx.name, None, "Complete")
-        dummy_watch = DummyWatch([event])
-
-        with patch("q8s.execution.watch.Watch", return_value=dummy_watch):
-            result = ctx._K8sContext__complete_and_get_job_status(
-                execute_task="task-id"
-            )
-
-        self.assertEqual(result, "stdout")
-        self.assertTrue(dummy_watch.stopped)
-        progress.update.assert_called_once()
-        self.assertIn("Complete", progress.update.call_args.kwargs["description"])
-        progress.advance.assert_called_once_with("task-id", 1)
-
-    def test_complete_and_get_job_status_running_keeps_stdout(self):
-        ctx, progress = self._make_context()
-        events = [
-            self._make_event(ctx.name, 1, None, event_type="ADDED"),
-            self._make_event(ctx.name, 1, None, event_type="MODIFIED"),
-        ]
-        dummy_watch = DummyWatch(events)
-
-        with patch("q8s.execution.watch.Watch", return_value=dummy_watch):
-            result = ctx._K8sContext__complete_and_get_job_status(
-                execute_task="task-id"
-            )
-
-        self.assertEqual(result, "stdout")
-        self.assertFalse(dummy_watch.stopped)
-        self.assertEqual(progress.update.call_count, 2)
-        progress.advance.assert_called_once_with("task-id", 1)
-
-    @patch("q8s.execution.entry_points")
-    def test_create_job_object_sets_plugin_version_label(self, mock_entry_points):
-        ctx = K8sContext.__new__(K8sContext)
-
-        ctx.target = "cpu"
-        ctx.name = "test-job"
-        ctx.namespace = "default"
-        ctx.registry_pat = None
-
-        ctx._K8sContext__progress = Mock()
-        ctx._K8sContext__progress.add_task.return_value = "task-id"
-        ctx._K8sContext__progress.advance = Mock()
-        ctx._K8sContext__progress.console = Mock()
-
-        ctx._K8sContext__prepare_environment = Mock(return_value=[])
-
-        ctx.jm = Mock()
-
-        ctx.jm.hook.prepare = Mock()
-        ctx.jm.hook.prepare.return_value = []
-
-        ctx._K8sContext__env = {}
-
-        plugin_template = Mock()
-        ctx.jm.hook.makejob.return_value = [plugin_template]
-
-        ctx.batch_api_instance = Mock()
-
-        created_job = Mock()
-        created_job.metadata.name = "test-job"
-        created_job.metadata.uid = "uid"
-        ctx.batch_api_instance.create_namespaced_job.return_value = created_job
-
-        ctx._K8sContext__create_config_map_object_from_workload = Mock()
-        ctx._K8sContext__create_environment_secret = Mock()
-
-        mock_ep = Mock()
-        mock_ep.dist.version = "1.2.3"
-
-        plugin_cls = Mock()
-        plugin_instance = Mock()
-        plugin_instance.target_name = "cpu"
-
-        plugin_cls.return_value = plugin_instance
-        mock_ep.load.return_value = plugin_cls
-
-        mock_entry_points.return_value = [mock_ep]
-
-        workload = Workload.from_code("print('hi')")
-
-        ctx._K8sContext__create_job_object_from_workload(workload)
-
-        created_spec = ctx.batch_api_instance.create_namespaced_job.call_args.kwargs[
-            "body"
-        ]
-
         self.assertEqual(
-            created_spec.metadata.labels["qubernetes.dev/plugin-version"],
-            "1.2.3",
+            [
+                call.args[0]
+                for call in self.core.delete_namespaced_secret.call_args_list
+            ],
+            [f"{interrupted.metadata.name}-regcred", interrupted.metadata.name],
+        )
+        self.hooks.cleanup.assert_called_once_with(
+            name=interrupted.metadata.name, namespace="default"
+        )
+
+    def test_progress_exception_does_not_stop_execution_or_cleanup(self):
+        self.progress.side_effect = RuntimeError("renderer failed")
+        with self.assertLogs("q8s.workload_run", level="ERROR") as logs:
+            self.assertEqual(
+                self.context.execute_workload(self.workload), ("job logs", "stdout")
+            )
+
+            self.watcher.stream.side_effect = KeyboardInterrupt
+            self.batch.delete_namespaced_job.side_effect = RuntimeError("delete failed")
+            output, stream = self.context.execute_workload(self.workload)
+
+        self.assertEqual(stream, "stderr")
+        self.assertTrue(output.startswith("Task interrupted by user"))
+        self.assertIn("delete failed", output)
+        self.hooks.cleanup.assert_called_once()
+        self.assertTrue(
+            all(
+                "Failed to report workload progress" in message
+                for message in logs.output
+            )
+        )
+
+    def test_interrupt_from_progress_still_cleans_up(self):
+        def interrupt_on_wait(update):
+            if update.status == "waiting":
+                raise KeyboardInterrupt
+
+        self.progress.side_effect = interrupt_on_wait
+        self.assertEqual(
+            self.context.execute_workload(self.workload),
+            ("Task interrupted by user", "stderr"),
+        )
+        self.watcher.stream.assert_not_called()
+        self.batch.delete_namespaced_job.assert_called_once()
+
+    @patch("q8s.workload_run.entry_points")
+    def test_submission_sets_plugin_version_label(self, entry_points):
+        plugin_entry = Mock()
+        plugin_entry.dist.version = "1.2.3"
+        plugin_entry.load.return_value = CPUJobTemplatePlugin
+        entry_points.return_value = [plugin_entry]
+
+        output, stream = self.context.execute_workload(self.workload, submit=True)
+
+        self.assertEqual(stream, "stdout", output)
+        self.assertEqual(
+            self._job().metadata.labels["qubernetes.dev/plugin-version"], "1.2.3"
         )
 
 
