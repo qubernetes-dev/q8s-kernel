@@ -369,12 +369,48 @@ class _WorkloadRun:
             ),
         )
 
-    def _get_job_logs(self) -> str:
+    def _get_job_logs(self, expected_phase: Literal["Succeeded", "Failed"]) -> str:
+        job_uid = next(
+            (
+                resource.uid
+                for resource in self._state.resources
+                if resource.kind == "Job"
+            ),
+            None,
+        )
+        if not job_uid:
+            raise ValueError("The workload run has no recorded Job UID")
+
         pods = self._core_api.list_namespaced_pod(
             self._state.namespace, label_selector=f"app={self._state.job_name}"
         )
+        owned_pods = [
+            pod
+            for pod in pods.items
+            if pod.metadata is not None
+            and any(
+                owner.kind == "Job" and owner.uid == job_uid
+                for owner in pod.metadata.owner_references or ()
+            )
+        ]
+        if not owned_pods:
+            raise ValueError("No Pod is owned by the workload run's Job")
+
+        if len(owned_pods) > 1:
+            matching_pods = [
+                pod
+                for pod in owned_pods
+                if pod.status is not None and pod.status.phase == expected_phase
+            ]
+            if len(matching_pods) != 1:
+                raise ValueError(
+                    f"Could not select a single Pod from {len(owned_pods)} owned Pods. "
+                    f"Found {len(matching_pods)} with phase {expected_phase}."
+                )
+            owned_pods = matching_pods
+
         logs = self._core_api.read_namespaced_pod_log(
-            name=pods.items[0].metadata.name, namespace=self._state.namespace
+            name=owned_pods[0].metadata.name, namespace=self._state.namespace
         )
         logging.debug("Job logs='%s'", logs)
         return logs
@@ -454,7 +490,9 @@ class _WorkloadRun:
                 )
 
             self._state.watch_finished()
-            logs = self._get_job_logs()
+            logs = self._get_job_logs(
+                "Succeeded" if job_outcome == "complete" else "Failed"
+            )
             self._state.logs_read()
             return logs, "stdout" if job_outcome == "complete" else "stderr"
         except KeyboardInterrupt:

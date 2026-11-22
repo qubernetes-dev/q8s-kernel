@@ -18,6 +18,7 @@ from unittest.mock import ANY, Mock, patch
 
 import requests
 from dxf.exceptions import DXFUnauthorizedError
+from kubernetes import client
 from kubernetes.client.exceptions import ApiException
 from q8s.execution import ContainerImageValidator, K8sContext
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin
@@ -139,9 +140,8 @@ class TestK8sContextExecuteWorkload(unittest.TestCase):
         self.batch.read_namespaced_job.side_effect = ApiException(status=404)
         self.core.read_namespaced_config_map.side_effect = ApiException(status=404)
         self.core.read_namespaced_secret.side_effect = ApiException(status=404)
-        self.core.list_namespaced_pod.return_value.items = [
-            SimpleNamespace(metadata=SimpleNamespace(name="pod-1"))
-        ]
+        self.pods = [("pod-1", None, True)]
+        self.core.list_namespaced_pod.side_effect = self._list_pods
         self.core.read_namespaced_pod_log.return_value = "job logs"
 
         dependencies = {
@@ -169,6 +169,30 @@ class TestK8sContextExecuteWorkload(unittest.TestCase):
 
     def _job(self):
         return self.batch.create_namespaced_job.call_args.kwargs["body"]
+
+    def _list_pods(self, namespace, label_selector):
+        job = self._job()
+        pods = []
+        for name, phase, owned in self.pods:
+            references = None
+            if owned is not None:
+                references = [
+                    client.V1OwnerReference(
+                        api_version="batch/v1",
+                        kind="Job",
+                        name=job.metadata.name,
+                        uid=job.metadata.uid if owned else "previous-job-uid",
+                    )
+                ]
+            pods.append(
+                client.V1Pod(
+                    metadata=client.V1ObjectMeta(
+                        name=name, owner_references=references
+                    ),
+                    status=client.V1PodStatus(phase=phase) if phase else None,
+                )
+            )
+        return client.V1PodList(items=pods)
 
     def _watch_events(self, *args, **kwargs):
         for event_type, active, conditions in self.events:
@@ -225,6 +249,66 @@ class TestK8sContextExecuteWorkload(unittest.TestCase):
         )
         self.watcher.stop.assert_called_once()
         self.assertEqual(self.progress.call_args.args[0].status, "job_failed")
+
+    def test_log_selection_ignores_pods_with_the_same_label_but_a_different_owner(self):
+        self.pods = [
+            ("old-pod", "Succeeded", False),
+            ("unowned-pod", "Succeeded", None),
+            ("run-pod", None, True),
+        ]
+
+        self.assertEqual(
+            self.context.execute_workload(self.workload), ("job logs", "stdout")
+        )
+        self.core.read_namespaced_pod_log.assert_called_once_with(
+            name="run-pod", namespace="default"
+        )
+
+    def test_log_selection_uses_the_only_owned_pod_with_the_matching_phase(self):
+        self.pods = [
+            ("succeeded-pod", "Succeeded", True),
+            ("failed-pod", "Failed", True),
+            ("pending-pod", "Pending", True),
+        ]
+        for condition, pod, stream in (
+            ("Complete", "succeeded-pod", "stdout"),
+            ("Failed", "failed-pod", "stderr"),
+        ):
+            with self.subTest(condition=condition):
+                self.events = [("MODIFIED", None, [(condition, "True")])]
+                self.core.read_namespaced_pod_log.reset_mock()
+                self.assertEqual(
+                    self.context.execute_workload(self.workload), ("job logs", stream)
+                )
+                self.core.read_namespaced_pod_log.assert_called_once_with(
+                    name=pod, namespace="default"
+                )
+
+    def test_log_selection_reports_when_no_owned_pod_exists(self):
+        self.pods = [("old-pod", "Succeeded", False)]
+
+        output, stream = self.context.execute_workload(self.workload)
+
+        self.assertEqual(stream, "stderr")
+        self.assertIn(f"Job {self._job().metadata.name} completed.", output)
+        self.assertIn("No Pod is owned by the workload run's Job", output)
+        self.core.read_namespaced_pod_log.assert_not_called()
+        self.batch.delete_namespaced_job.assert_not_called()
+
+    def test_log_selection_reports_when_no_unique_pod_matches_the_job_outcome(self):
+        self.events = [("MODIFIED", None, [("Failed", "True")])]
+        for phase, expected_count in (("Running", 0), ("Failed", 2)):
+            with self.subTest(phase=phase):
+                self.pods = [("first-pod", phase, True), ("second-pod", phase, True)]
+
+                output, stream = self.context.execute_workload(self.workload)
+
+                self.assertEqual(stream, "stderr")
+                self.assertIn(f"Job {self._job().metadata.name} failed.", output)
+                self.assertIn("Could not select a single Pod", output)
+                self.assertIn(f"Found {expected_count} with phase Failed", output)
+        self.core.read_namespaced_pod_log.assert_not_called()
+        self.batch.delete_namespaced_job.assert_not_called()
 
     def test_watch_ignores_unconfirmed_conditions_until_job_completes(self):
         self.events = [

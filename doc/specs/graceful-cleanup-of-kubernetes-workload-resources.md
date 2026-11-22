@@ -5,7 +5,7 @@ summary: "Graceful cleanup of Kubernetes workload resources"
 
 # Graceful cleanup of Kubernetes workload resources
 
-Status: Draft
+Status: Implemented
 
 Issue: [#72](https://github.com/qubernetes-dev/q8s-kernel/issues/72)
 
@@ -32,8 +32,9 @@ This specification covers resource ownership and cleanup for each `K8sContext.ex
 5. A successful submit-only invocation must acknowledge submission after creating the required resources and leave the Job running. A blocking invocation must preserve the existing `(output, stream_name)` contract and read the Pod logs for both successful and failed Jobs. Finished Jobs and their dependents remain eligible for Kubernetes TTL cleanup 100 seconds after the Job finishes. [Job configuration](../../packages/q8s/src/q8s/workload_run.py)
 6. The CLI and notebook render progress from execution updates. Log ordinary renderer exceptions and continue execution or cleanup. A user interrupt from a progress callback triggers the same cleanup as an interrupt during a Kubernetes call.
 7. Blocking execution treats a Job as terminal when any `Complete` or `Failed` condition has status `True`. Missing, empty, and unconfirmed conditions keep the watch open. If the watch ends first, return an explicit diagnostic on `stderr` and leave the Job in Kubernetes. If log retrieval fails after a terminal observation, report the known Job outcome and the log retrieval error on `stderr`. [Kubernetes Job status](https://kubernetes.io/docs/reference/kubernetes-api/batch/job-v1/#JobStatus)
+8. Use the `app` label to narrow the Pod lookup and verify each Pod's Job owner reference against the workload run's recorded Job UID. Read logs from the sole owned Pod when there is one. When several owned Pods match, select the sole Pod in phase `Succeeded` for a `Complete` Job or `Failed` for a `Failed` Job. If there are no owned Pods or the phase fails to identify exactly one Pod, report that logs are unavailable alongside the confirmed Job outcome. [Kubernetes owner references](https://kubernetes.io/docs/concepts/overview/working-with-objects/owners-dependents/) · [Pod phases](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-phase)
 
-## Proposed workload state machine
+## Workload state machine
 
 Each `execute_workload()` invocation creates a workload run. The run captures the target, image, registry credentials, and environment at the start. Its synchronous `python-statemachine` `StateChart` holds the run identity and resource records. The run records each create attempt before calling Kubernetes and adds the resource UID when Kubernetes responds. Kubernetes runs the Job and reports its status through the watch. [ADR 6](../adrs/0006-graceful-cleanup-of-kubernetes-workload-resources.md#decision)
 
@@ -93,11 +94,14 @@ stateDiagram-v2
 | Job conditions are missing, empty, or present without a confirmed terminal condition | Continue watching until the Job reaches `Complete=True` or `Failed=True`, or the watch ends. |
 | The watch ends before observing a terminal condition | Return a diagnostic on `stderr` without fetching logs or requesting deletion. |
 | Pod log retrieval fails after a confirmed terminal condition | Report the confirmed outcome and the log retrieval error on `stderr`. |
+| A label-matching Pod belongs to a different Job UID | Skip that Pod and read logs only from the selected Pod owned by the run's Job. |
+| Several Pods are owned by the run's Job | Read logs from the sole Pod whose phase matches the confirmed Job outcome. If zero or multiple Pods match the phase, report that a single Pod could not be selected. |
+| No Pod is owned by the run's Job | Return the confirmed Job outcome and the missing-Pod diagnostic on `stderr`. |
 | A progress renderer raises an ordinary exception | Log the renderer error and continue the workload run or cleanup. |
 | The user interrupts from a progress callback | Attempt cleanup of the run's resources and report the interruption. |
 
 ## Verification and maintenance
 
-The execution tests cover submit-only acknowledgment, terminal and incomplete Job observations, log retrieval failures, interrupted-run isolation, partial creation, lost create responses, name collisions, repeated cleanup, and diagnostics for deletion and target hook failures. Kubernetes API calls are mocked. [Execution tests](../../packages/q8s/tests/test_execution.py)
+The execution tests cover submit-only acknowledgment, terminal and incomplete Job observations, Pod ownership and log selection, log retrieval failures, interrupted-run isolation, partial creation, lost create responses, name collisions, repeated cleanup, and diagnostics for deletion and target hook failures. Kubernetes API calls are mocked. [Execution tests](../../packages/q8s/tests/test_execution.py)
 
-Verify cascading deletion in a Kubernetes test namespace by interrupting a running workload and checking that the Job, its Pods, the ConfigMap, and both Secrets are eventually absent when registry credentials are configured. Also verify that a submitted Job remains available after acknowledgment and that Kubernetes removes its dependents after the Job finishes and its TTL expires.
+Live-cluster verification remains pending. In a Kubernetes test namespace, interrupt a running workload and check that the Job, its Pods, the ConfigMap, and both Secrets are eventually absent when registry credentials are configured. Also verify that a submitted Job remains available after acknowledgment and that Kubernetes removes its dependents after the Job finishes and its TTL expires.

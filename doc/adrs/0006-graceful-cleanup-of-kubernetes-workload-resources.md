@@ -8,7 +8,7 @@ Date: 2026-11-20
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -22,13 +22,13 @@ Specification: [Graceful cleanup of Kubernetes workload resources](../specs/grac
 > - Attempt the remaining deletions if one fails, and report cleanup failures alongside the original error.
 > - Keep submit-only Jobs running after acknowledgment and use the existing Kubernetes TTL to remove finished Jobs and their dependent resources.
 
-`K8sContext` creates a Job before creating its ConfigMap and Secrets. If one of those later calls fails, the Job can remain pending and never reach the terminal condition that starts the TTL. On interruption, a deletion error can stop cleanup before q8s reaches the Job. Both the CLI and notebook call the same synchronous execution method. [Workload execution](../../packages/q8s/src/q8s/execution.py) · [Kubernetes Job TTL](https://kubernetes.io/docs/concepts/workloads/controllers/ttlafterfinished/)
+Before this change, a failed ConfigMap or Secret creation could leave the Job pending, where its cleanup TTL would never start. On interruption, a deletion error could stop cleanup before q8s reached the Job. Both the CLI and notebook call the same synchronous execution method. [Workload execution](../../packages/q8s/src/q8s/execution.py) · [Kubernetes Job TTL](https://kubernetes.io/docs/concepts/workloads/controllers/ttlafterfinished/)
 
 ## Decision
 
 Create a workload run for each `K8sContext.execute_workload()` invocation. The run captures the selected execution settings and owns a synchronous `python-statemachine` `StateChart`, resource creation, submit-only acknowledgment, Job watching, log retrieval, and cleanup. `K8sContext` supplies the Kubernetes clients and configuration. The CLI and notebook render progress updates from the run. Kubernetes continues to manage Job execution and TTL cleanup. [Workload run](../../packages/q8s/src/q8s/workload_run.py)
 
-[Workload state machine diagram](../specs/graceful-cleanup-of-kubernetes-workload-resources.md#proposed-workload-state-machine)
+[Workload state machine diagram](../specs/graceful-cleanup-of-kubernetes-workload-resources.md#workload-state-machine)
 
 ### Library assessment
 
@@ -49,4 +49,4 @@ Both versions have dependency-free cores and support q8s's Python 3.10 minimum. 
 
 The state chart decides when cleanup should run and holds each invocation's resource records. The execution driver updates those records as creation progresses and uses them to attempt cleanup after partial creation or interruption. The driver treats missing resources as already deleted and preserves the original error alongside cleanup failures. Submit-only calls still return after successful resource creation, and finished Jobs remain eligible for Kubernetes TTL cleanup.
 
-The specification defines acceptance criteria for partial creation, interrupted runs, and deletion failures. [Draft specification](../specs/graceful-cleanup-of-kubernetes-workload-resources.md)
+The specification defines acceptance criteria for partial creation, interrupted runs, and deletion failures. [Implementation specification](../specs/graceful-cleanup-of-kubernetes-workload-resources.md)
