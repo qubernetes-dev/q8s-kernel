@@ -24,13 +24,83 @@ from q8s.project import Project
 from q8s.targets import get_available_targets
 from q8s.utils import get_docker_image, get_kubeconfig
 from q8s.workload import Workload
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from q8s.workload_run import ProgressUpdate
+from rich.markup import escape
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    Task,
+    TaskID,
+    TextColumn,
+    TimeElapsedColumn,
+)
+from rich.table import Column
+from rich.text import Text
 from typing_extensions import Annotated
 
 app = typer.Typer()
 TARGET_HELP = (
     f"Execution target. Available targets: {', '.join(get_available_targets())}"
 )
+
+
+class _WorkloadStatusColumn(SpinnerColumn):
+    def render(self, task: Task):
+        if task.finished:
+            outcome = task.fields.get("outcome", "success")
+            if outcome == "failed":
+                return Text("×", style="red")
+            if outcome == "warning":
+                return Text("!", style="yellow")
+            return Text("✓", style="green")
+        return super().render(task)
+
+
+class _WorkloadProgress:
+    _descriptions = {
+        "cluster": "Cluster configuration",
+        "preparation": "Job preparation",
+        "execution": "Job execution",
+    }
+    _statuses = {
+        "loading": ("[dim]Loading[/]", False, ""),
+        "creating": ("[dim]Creating resources[/]", False, ""),
+        "ready": ("[green]Ready[/]", True, "success"),
+        "waiting": ("[dim]Waiting for Job[/]", False, ""),
+        "scheduled": ("[cyan]Scheduled[/]", False, ""),
+        "running": ("[cyan]Running[/]", False, ""),
+        "submitted": ("[cyan]Submitted[/]", True, "success"),
+        "complete": ("[green]Complete[/]", True, "success"),
+        "job_failed": ("[red]Failed[/]", True, "failed"),
+        "watch_ended": ("[yellow]Watch ended before completion[/]", True, "warning"),
+        "logs_unavailable": ("[red]Pod logs unavailable[/]", True, "failed"),
+        "failed": ("[red]Failed[/]", True, "failed"),
+        "interrupted": ("[red]Interrupted[/]", True, "failed"),
+    }
+
+    def __init__(self, progress: Progress):
+        self._progress = progress
+        self._tasks: dict[tuple[str | None, str], TaskID] = {}
+
+    def __call__(self, update: ProgressUpdate):
+        if update.status == "configured":
+            status = f"[dim]Namespace[/] {escape(update.namespace or '')}"
+            finished, outcome = True, "success"
+        else:
+            status, finished, outcome = self._statuses[update.status]
+
+        key = (update.job_name, update.phase)
+        task = self._tasks.get(key)
+        if task is None:
+            task = self._progress.add_task(
+                self._descriptions[update.phase], total=1, status=status
+            )
+            self._tasks[key] = task
+            if not finished:
+                return
+        self._progress.update(
+            task, completed=int(finished), status=status, outcome=outcome
+        )
 
 
 @app.command(
@@ -184,12 +254,14 @@ def execute(
         raise typer.Exit(code=1)
 
     with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        TimeElapsedColumn(),
-        expand=True,
+        _WorkloadStatusColumn(style="cyan"),
+        TextColumn("{task.description}", style="bold"),
+        TimeElapsedColumn(table_column=Column(justify="right")),
+        TextColumn("{task.fields[status]}"),
     ) as progress:
-        k8s_context = K8sContext(kubeconfig.as_posix(), progress=progress)
+        k8s_context = K8sContext(
+            kubeconfig.as_posix(), progress=_WorkloadProgress(progress)
+        )
 
         if target not in k8s_context.available_targets():
             typer.echo(

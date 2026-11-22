@@ -1,21 +1,36 @@
-import base64
-import logging
+# Copyright 2024-2026 Qubernetes
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import random
 import string
-from importlib.metadata import entry_points, version
-from json import JSONEncoder, loads
+from importlib.metadata import entry_points
 
 import pluggy
 import requests
 from dotenv import dotenv_values
 from dxf import DXF
 from dxf.exceptions import DXFUnauthorizedError
-from kubernetes import client, config, watch
+from kubernetes import client, config
 from q8s.plugins.job_template_spec import JobTemplatePluginSpec
-from q8s.utils import extract_non_none_value
-from rich.progress import Progress, TaskID
 
 from .workload import Workload
+from .workload_run import (
+    ProgressObserver,
+    ProgressUpdate,
+    _WorkloadRun,
+    report_progress,
+)
 
 
 def load_env():
@@ -99,43 +114,38 @@ class ContainerImageValidator:
 class K8sContext:
     container_image: str | None = None
     registry_pat: str | None = None
-    jupyter_logger: None
     target: str = "cpu"
     jm: pluggy.PluginManager = pluggy.PluginManager("q8s")
-    __progress: Progress | None
 
-    def __init__(self, kubeconfig: str, logger=None, progress: Progress = None):
+    def __init__(self, kubeconfig: str, progress: ProgressObserver | None = None):
         """
         Initialize the Kubernetes context.
         """
-        self.__progress = progress
+        self._progress = progress
 
         self.jm.add_hookspecs(JobTemplatePluginSpec)
         self._load_plugins()
 
-        task_config = self.__progress.add_task(
-            "[cyan]Loading configuration...", total=1
-        )
-
-        config.load_kube_config(kubeconfig)
-        self.__progress.console.print("Cluster configuration loaded")
-        self.__progress.update(task_config, completed=True)
-
+        report_progress(progress, ProgressUpdate("cluster", "loading"))
         try:
+            config.load_kube_config(kubeconfig)
             _, active_context = config.list_kube_config_contexts(config_file=kubeconfig)
-            self.namespace = active_context["context"]["namespace"]
-        except KeyError:
-            self.namespace = "default"
-        self.__progress.console.print(f"Active namespace: {self.namespace}")
-
-        self.core_api_instance = client.CoreV1Api()
-        self.batch_api_instance = client.BatchV1Api()
+            self.namespace = active_context.get("context", {}).get(
+                "namespace", "default"
+            )
+            self.core_api_instance = client.CoreV1Api()
+            self.batch_api_instance = client.BatchV1Api()
+        except (Exception, KeyboardInterrupt) as error:
+            status = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
+            report_progress(progress, ProgressUpdate("cluster", status))
+            raise
+        report_progress(
+            progress, ProgressUpdate("cluster", "configured", self.namespace)
+        )
 
         self.name = f"qubernetes-job-{K8sContext.get_id()}"
 
         self.__env = load_env()
-
-        self.jupyter_logger = logger
 
     @staticmethod
     def get_id():
@@ -163,389 +173,23 @@ class K8sContext:
     def create_job_object(self, code: str) -> client.V1Job:
         return None
 
-    def __registry_credentials_secret_name(self):
-        return f"{self.name}-regcred"
-
-    def __create_job_object_from_workload(self, workload: Workload) -> client.V1Job:
-        """
-        Create a job object with the given workload.
-        """
-        prepare_task = self.__progress.add_task("[cyan]Prepare job...", total=1)
-        env = self.__prepare_environment()
-
-        self.jm.hook.prepare(
-            target=self.target, name=self.name, namespace=self.namespace, env=self.__env
-        )
-
-        logging.debug(f"Container image: {self.container_image}")
-
-        template = extract_non_none_value(
-            self.jm.hook.makejob(
-                env=env,
-                container_image=self.container_image,
-                target=self.target,
-                registry_credentials_secret_name=self.__registry_credentials_secret_name(),
-                name=self.name,
-                registry_pat=self.registry_pat,
-                workload=workload,
-            )
-        )
-
-        # Create the specification of deployment
-        spec = client.V1JobSpec(
-            template=template,
-            # cleanup job and associate resources
-            ttl_seconds_after_finished=100,
-            # do not retry failed jobs
-            backoff_limit=0,
-        )
-
-        plugin_version = None
-
-        for ep in entry_points(group="q8s.targets"):
-            plugin_cls = ep.load()
-            plugin = plugin_cls()
-
-            if hasattr(plugin, "target_name") and plugin.target_name == self.target:
-                plugin_version = ep.dist.version
-                break
-
-        labels = {
-            "qubernetes.dev/job.type": "jupyter",
-            "qubernetes.dev/q8s-version": version("q8s"),
-            "qubernetes.dev/plugin-version": plugin_version,
-        }
-
-        # Instantiate the job object
-        job_spec = client.V1Job(
-            api_version="batch/v1",
-            kind="Job",
-            metadata=client.V1ObjectMeta(
-                name=self.name,
-                namespace=self.namespace,
-                labels=labels,
-            ),
-            spec=spec,
-        )
-
-        job = self.batch_api_instance.create_namespaced_job(
-            body=job_spec, namespace=self.namespace
-        )
-        self.__progress.console.print("Job created")
-
-        self.__create_config_map_object_from_workload(job, workload=workload)
-        self.__progress.console.print("Application code attached")
-        self.__create_environment_secret(job)
-        self.__progress.console.print("Environment variables created")
-
-        if self.registry_pat:
-            self.__create_registry_credentials_secret(job)
-        self.__progress.advance(prepare_task, 1)
-        return job
-
-    def __create_config_map_object_from_workload(
-        self, job: client.V1Job, workload: Workload
-    ):
-        """
-        Create a ConfigMap object with the given workload.
-        """
-
-        # Configureate ConfigMap from a local file
-        configmap = client.V1ConfigMap(
-            api_version="v1",
-            kind="ConfigMap",
-            data=workload.data,
-            metadata=client.V1ObjectMeta(
-                name=self.name,
-                owner_references=[
-                    client.V1OwnerReference(
-                        api_version="batch/v1",
-                        kind="Job",
-                        name=job.metadata.name,
-                        uid=job.metadata.uid,
-                        # block_owner_deletion=True,
-                        # controller=True,
-                    )
-                ],
-            ),
-        )
-
-        self.core_api_instance.create_namespaced_config_map(
-            namespace=self.namespace, body=configmap
-        )
-
-    def __create_environment_secret(self, job: client.V1Job):
-        """
-        Create a Secret object with the environment variables.
-        """
-        data = {}
-
-        for key in self.__env.keys():
-            data[key] = base64.b64encode(self.__env[key].encode()).decode()
-
-        secret = client.V1Secret(
-            api_version="v1",
-            kind="Secret",
-            type="Opaque",
-            immutable=True,
-            data=data,
-            metadata=client.V1ObjectMeta(
-                name=self.name,
-                namespace=self.namespace,
-                owner_references=[
-                    client.V1OwnerReference(
-                        api_version="batch/v1",
-                        kind="Job",
-                        name=job.metadata.name,
-                        uid=job.metadata.uid,
-                        # block_owner_deletion=True,
-                        # controller=True,
-                    )
-                ],
-            ),
-        )
-
-        self.core_api_instance.create_namespaced_secret(
-            namespace=self.namespace, body=secret
-        )
-
-    def __create_registry_credentials_secret(self, job: client.V1Job):
-        """
-        Create a Secret object with the registry credentials.
-        """
-        segments = self.container_image.split("/")
-        # Find user name for images on Docker Hub
-        username = segments[0] if len(segments) == 2 else segments[1]
-        registry = segments[0] if len(segments) == 3 else "https://index.docker.io/v1/"
-
-        config = {
-            "auths": {
-                registry: {
-                    "auth": base64.b64encode(
-                        f"{username}:{self.registry_pat}".encode()
-                    ).decode(),
-                }
-            }
-        }
-
-        secret = client.V1Secret(
-            api_version="v1",
-            kind="Secret",
-            type="kubernetes.io/dockerconfigjson",
-            immutable=True,
-            metadata=client.V1ObjectMeta(
-                name=self.__registry_credentials_secret_name(),
-                namespace=self.namespace,
-                owner_references=[
-                    client.V1OwnerReference(
-                        api_version="batch/v1",
-                        kind="Job",
-                        name=job.metadata.name,
-                        uid=job.metadata.uid,
-                        # block_owner_deletion=True,
-                        # controller=True,
-                    )
-                ],
-            ),
-            data={
-                ".dockerconfigjson": base64.b64encode(
-                    JSONEncoder().encode(config).encode()
-                ).decode(),
-            },
-        )
-
-        self.core_api_instance.create_namespaced_secret(
-            namespace=self.namespace, body=secret
-        )
-
-    def __delete_job(self):
-        """
-        Delete the job and its associated resources.
-        """
-        cleanup_task = self.__progress.add_task("[cyan]Cleaning up...", total=1)
-
-        if self.registry_pat:
-            self.core_api_instance.delete_namespaced_secret(
-                self.__registry_credentials_secret_name(), self.namespace
-            )
-            self.__progress.console.print("Registry credentials removed")
-
-        self.core_api_instance.delete_namespaced_secret(self.name, self.namespace)
-        self.__progress.console.print("Environment variables removed.")
-
-        self.core_api_instance.delete_namespaced_config_map(
-            self.name,
-            self.namespace,
-            body=client.V1DeleteOptions(propagation_policy="Foreground"),
-        )
-        self.__progress.console.print("Application code removed.")
-
-        self.jm.hook.cleanup(name=self.name, namespace=self.namespace)
-
-        api_response = self.batch_api_instance.delete_namespaced_job(
-            self.name,
-            self.namespace,
-            body=client.V1DeleteOptions(propagation_policy="Foreground"),
-            _preload_content=False,
-        )
-
-        try:
-            data = loads(api_response.data)
-
-            self.__progress.console.print(
-                f"Job removed. status='{data['status']['conditions'][0]['type']}'"
-            )
-        except Exception:
-            self.__progress.console.print(
-                f"Job removed. status='{str(api_response.status)}'"
-            )
-        finally:
-            self.__progress.advance(cleanup_task, 1)
-
-    def __get_job_logs(self, name="qiskit-aer-gpu"):
-        """
-        Get the logs of the job.
-        """
-        api_response = self.core_api_instance.read_namespaced_pod_log(
-            name=name, namespace=self.namespace
-        )
-        logging.debug("Job logs='%s'" % str(api_response))
-        return api_response
-
-    def __get_pods_in_job(self):
-        """
-        Get the pods in the job.
-        """
-        pods = self.core_api_instance.list_namespaced_pod(
-            self.namespace, label_selector=f"app={self.name}"
-        )
-
-        pod_name = pods.items[0].metadata.name
-
-        return pod_name
-
-    def __complete_and_get_job_status(self, execute_task: TaskID):
-        """
-        Wait for the job to complete and get its status.
-        """
-        result = "stdout"
-
-        w = watch.Watch()
-
-        for event in w.stream(
-            self.batch_api_instance.list_namespaced_job,
-            namespace=self.namespace,
-            label_selector="qubernetes.dev/job.type=jupyter",
-        ):
-            if event["object"].metadata.name == self.name:
-
-                # Job execution completed
-                if event["object"].status.active is None:
-                    print(event["object"].status.conditions)
-
-                    # Failed
-                    if event["object"].status.conditions[-1].type == "Failed":
-                        message = "Failed"
-                        color = "red"
-                        w.stop()
-                        result = "stderr"
-
-                    # Succeeded
-                    elif event["object"].status.conditions[-1].type == "Complete":
-                        message = event["object"].status.conditions[-1].type
-                        color = "green"
-                        w.stop()
-
-                    else:
-                        pass
-
-                # Job schedukled
-                elif event["type"] == "ADDED":
-                    message = "Scheduled"
-                    color = "orange3"
-                # Job running
-                else:
-                    message = "Running"
-                    color = "yellow"
-
-                if self.jupyter_logger is None:
-                    self.__progress.update(
-                        execute_task,
-                        description=f"[cyan]Executing job... [{color}]{message}",
-                    )
-                else:
-                    self.jupyter_logger(f"Pod status: {message}")
-
-        self.__progress.advance(execute_task, 1)
-
-        return result
-
-    def __prepare_environment(self):
-        """
-        Prepare the environment variables.
-        """
-        env = []
-
-        for key in self.__env.keys():
-            env.append(
-                client.V1EnvVar(
-                    name=key,
-                    value_from=client.V1EnvVarSource(
-                        secret_key_ref=client.V1SecretKeySelector(
-                            name=self.name, key=key
-                        )
-                    ),
-                )
-            )
-
-        return env
-
     def execute_workload(
         self, workload: Workload, submit: bool = False
     ) -> tuple[str, str]:
-        """
-        Execute the given workload.
-        """
-
-        try:
-            self.__create_job_object_from_workload(workload=workload)
-
-            execute_task = self.__progress.add_task("[cyan]Executing job...", total=1)
-
-            if submit is False:
-                if self.jupyter_logger is not None:
-                    self.jupyter_logger(f"Job {self.name} created")
-
-                stream = self.__complete_and_get_job_status(execute_task=execute_task)
-
-                job = self.__get_pods_in_job()
-                logs = self.__get_job_logs(job)
-                self.__progress.console.print("Fetched job logs")
-
-                return logs, stream
-            else:
-                self.__progress.update(
-                    execute_task,
-                    description=f"[cyan]Executing job... [orange3]Queued {self.name}",
-                )
-
-                self.__progress.advance(execute_task, 1)
-
-                return f"Job {self.name} submitted successfully.", "stdout"
-        except KeyboardInterrupt:
-            self.abort()
-            return "Task interrupted by user", "stderr"
-        except Exception:
-            return "An error occurred.", "stderr"
-        finally:
-            # self.__delete_job()
-            pass
-
-    def abort(self):
-        """
-        Abort the execution.
-        """
-        self.__delete_job()
+        """Execute the given workload."""
+        run = _WorkloadRun(
+            namespace=self.namespace,
+            name_prefix=self.name,
+            target=self.target,
+            container_image=self.container_image,
+            registry_pat=self.registry_pat,
+            env=self.__env,
+            core_api=self.core_api_instance,
+            batch_api=self.batch_api_instance,
+            hooks=self.jm.hook,
+            progress=self._progress,
+        )
+        return run.execute(workload, submit)
 
     def _load_plugins(self):
         for ep in entry_points(group="q8s.targets"):
