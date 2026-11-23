@@ -2,7 +2,7 @@
 
 CUDA-based GPU execution target plugin for q8s.
 
-This package provides the `gpu` execution target for q8s and depends on `q8s>=0.14.0`.
+This package provides the `gpu` execution target for q8s and depends on `q8s>=0.14.3`.
 
 ## Installation
 

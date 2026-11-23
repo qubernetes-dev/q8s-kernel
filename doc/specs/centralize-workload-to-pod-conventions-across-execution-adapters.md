@@ -35,7 +35,7 @@ Give adapter authors one supported way to assemble a Pod template with the commo
 
 ## Implementation Decisions
 
-- Expose the shared builder as `JobPlugin.build_workload_pod_template`. It takes the workload, run name, image, ordered environment, and optional image pull Secret name and returns a Kubernetes Pod template. It uses the workload's file mappings and entry point and takes target-specific settings as needed for the supported adapters.
+- Expose the shared builder as `JobPlugin.build_workload_pod_template`. It takes the workload, run name, image, ordered environment, and optional image pull Secret name and returns a Kubernetes Pod template. Its optional target settings are container resources, runtime class, Pod labels and annotations, node selector, and tolerations. The builder reserves the `app` label for the run name.
 - Apply the [container conventions](container-conventions.md) consistently for Python launch and the read-only `/app` workspace mount. Preserve workload argument order and the image's working directory. The template projects workload ConfigMap keys to their relative paths, labels the Pod with `app` set to the run name, sets the image pull policy to `Always` and the restart policy to `Never`, and includes the pull Secret reference when supplied.
 - Keep base-image selection and environment assembly with each adapter. Preserve CUDA resource requests and limits and the NVIDIA runtime class. Preserve HPC labels, Slurm annotations, node selectors, and tolerations, as well as the existing environment order for each target, including the placement of `PYTHONPATH` in HPC CPU.
 - Register separately packaged adapters through `q8s.targets`. The adapter class exposes a `target_name` that matches the project target key and provides base-image selection and the `makejob` hook. The hook may use the shared builder or return a custom template.
@@ -56,4 +56,4 @@ Give adapter authors one supported way to assemble a Pod template with the commo
 
 ## Further Notes
 
-The CPU migration and template regression tests are in the current implementation. CUDA and both HPC migrations, package compatibility checks, and the authoring guide remain follow-up work for this change. The guide will show how to choose an image, register a target, configure it in `Q8Sproject`, and verify a workload on the target.
+CPU, CUDA, HPC CPU, and HPC ROCm use the shared builder. The migrated adapter packages declare q8s 0.14.3 as their minimum. After the core and adapter releases, the authoring guide will show how to choose an image, register a target, configure it in `Q8Sproject`, and verify a workload on the target.

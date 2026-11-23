@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from kubernetes import client
 from q8s.constants import WORKSPACE
@@ -40,8 +40,23 @@ class JobPlugin:
         image: str | None,
         env: Sequence[client.V1EnvVar],
         image_pull_secret_name: str | None = None,
+        resources: client.V1ResourceRequirements | None = None,
+        runtime_class_name: str | None = None,
+        labels: Mapping[str, str] | None = None,
+        annotations: Mapping[str, str] | None = None,
+        node_selector: Mapping[str, str] | None = None,
+        tolerations: Sequence[client.V1Toleration] | None = None,
     ) -> client.V1PodTemplateSpec:
-        """Build a Pod template that mounts the run's same-named workload ConfigMap."""
+        """Build the common workload Pod template for an execution adapter.
+
+        Use the workload run name for `name`. The template mounts the same-named
+        ConfigMap read-only at the workspace path and reserves the `app` label
+        for that name. Pass the resolved image, prepared environment in order,
+        and the pull Secret name when the run uses registry credentials.
+        Optional resource, runtime, metadata, and placement settings apply
+        to the resulting container or Pod. The workload run creates resources
+        from the template.
+        """
         volume_name = f"app-volume-{name}"
         launch_args = (
             ["-m", workload.entry_module]
@@ -55,6 +70,7 @@ class JobPlugin:
             command=["python"],
             args=launch_args + workload.args,
             image_pull_policy="Always",
+            resources=resources,
             volume_mounts=[
                 client.V1VolumeMount(
                     name=volume_name, mount_path=WORKSPACE, read_only=True
@@ -72,7 +88,10 @@ class JobPlugin:
             ),
         )
         return client.V1PodTemplateSpec(
-            metadata=client.V1ObjectMeta(labels={"app": name}),
+            metadata=client.V1ObjectMeta(
+                labels={**(labels or {}), "app": name},
+                annotations=dict(annotations) if annotations is not None else None,
+            ),
             spec=client.V1PodSpec(
                 containers=[container],
                 image_pull_secrets=(
@@ -81,6 +100,11 @@ class JobPlugin:
                     else []
                 ),
                 restart_policy="Never",
+                runtime_class_name=runtime_class_name,
+                node_selector=(
+                    dict(node_selector) if node_selector is not None else None
+                ),
+                tolerations=list(tolerations) if tolerations is not None else None,
                 volumes=[volume],
             ),
         )

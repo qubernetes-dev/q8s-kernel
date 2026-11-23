@@ -1,3 +1,17 @@
+# Copyright 2024-2026 Qubernetes
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import shlex
@@ -157,8 +171,6 @@ class HPCJobTemplatePlugin(JobPlugin):
 
         hpc_config = load_hpc_config(workload)
 
-        volume_name = f"app-volume-{name}"
-
         env_var = list(env)
 
         env_var.append(
@@ -180,67 +192,20 @@ class HPCJobTemplatePlugin(JobPlugin):
 
         self.patch_environment_with_git_info(env_var)
 
-        container = client.V1Container(
-            name="quantum-routine",
+        return self.build_workload_pod_template(
+            workload,
+            name=name,
             image=container_image,
             env=env_var,
-            command=["python"],
-            args=(
-                ["-m", workload.entry_module] + workload.args
-                if workload.is_src_project
-                else [f"{WORKSPACE}/{workload.entry_script}"] + workload.args
+            image_pull_secret_name=(
+                registry_credentials_secret_name if registry_pat else None
             ),
-            image_pull_policy="Always",
-            volume_mounts=[
-                client.V1VolumeMount(
-                    name=volume_name,
-                    mount_path=WORKSPACE,
-                    read_only=True,
+            labels={"interlink.cern.ch/provider": "remote-hpc"},
+            annotations={"slurm-job.vk.io/flags": " ".join(hpc_config["slurm_flags"])},
+            node_selector={"kubernetes.io/hostname": hpc_config["q8s_node"]},
+            tolerations=[
+                client.V1Toleration(
+                    key="virtual-node.interlink/no-schedule", operator="Exists"
                 )
             ],
         )
-
-        annotations = {"slurm-job.vk.io/flags": " ".join(hpc_config["slurm_flags"])}
-
-        template = client.V1PodTemplateSpec(
-            metadata=client.V1ObjectMeta(
-                labels={
-                    "app": name,
-                    "interlink.cern.ch/provider": "remote-hpc",
-                },
-                annotations=annotations,
-            ),
-            spec=client.V1PodSpec(
-                containers=[container],
-                node_selector={"kubernetes.io/hostname": hpc_config["q8s_node"]},
-                tolerations=[
-                    client.V1Toleration(
-                        key="virtual-node.interlink/no-schedule", operator="Exists"
-                    )
-                ],
-                image_pull_secrets=(
-                    [
-                        client.V1LocalObjectReference(
-                            name=registry_credentials_secret_name
-                        )
-                    ]
-                    if registry_pat
-                    else []
-                ),
-                restart_policy="Never",
-                volumes=[
-                    client.V1Volume(
-                        name=volume_name,
-                        config_map=client.V1ConfigMapVolumeSource(
-                            name=name,
-                            items=[
-                                client.V1KeyToPath(key=k, path=v)
-                                for k, v in workload.mappings.items()
-                            ],
-                        ),
-                    )
-                ],
-            ),
-        )
-
-        return template

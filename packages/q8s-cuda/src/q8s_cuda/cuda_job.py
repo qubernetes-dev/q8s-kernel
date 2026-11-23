@@ -1,3 +1,17 @@
+# Copyright 2024-2026 Qubernetes
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import re
 from importlib.metadata import version
@@ -41,8 +55,6 @@ class CUDAJobTemplatePlugin(JobPlugin):
         if target != self.target_name:
             return None
 
-        volume_name = f"app-volume-{name}"
-
         env_var = list(env)
         if workload.is_src_project:
             env_var.append(client.V1EnvVar(name="PYTHONPATH", value=f"{WORKSPACE}/src"))
@@ -63,74 +75,27 @@ class CUDAJobTemplatePlugin(JobPlugin):
 
         self.patch_environment_with_git_info(env_var)
 
-        container = client.V1Container(
-            name="quantum-routine",
+        return self.build_workload_pod_template(
+            workload,
+            name=name,
             image=container_image,
             env=env_var,
-            command=["python"],
-            args=(
-                ["-m", workload.entry_module] + workload.args
-                if workload.is_src_project
-                else [f"{WORKSPACE}/{workload.entry_script}"] + workload.args
+            image_pull_secret_name=(
+                registry_credentials_secret_name if registry_pat else None
             ),
-            image_pull_policy="Always",
-            resources=(
-                client.V1ResourceRequirements(
-                    limits=(
-                        {
-                            "cpu": "2",
-                            "ephemeral-storage": "50Gi",
-                            "memory": MEMORY,
-                            "nvidia.com/gpu": "1",
-                            # "qubernetes.dev/qpu": "1",
-                        }
-                    ),
-                    requests=(
-                        {
-                            "cpu": "2",
-                            "ephemeral-storage": "0",
-                            "memory": MEMORY,
-                            "nvidia.com/gpu": "1",
-                            # "qubernetes.dev/qpu": "1",
-                        }
-                    ),
-                )
+            resources=client.V1ResourceRequirements(
+                limits={
+                    "cpu": "2",
+                    "ephemeral-storage": "50Gi",
+                    "memory": MEMORY,
+                    "nvidia.com/gpu": "1",
+                },
+                requests={
+                    "cpu": "2",
+                    "ephemeral-storage": "0",
+                    "memory": MEMORY,
+                    "nvidia.com/gpu": "1",
+                },
             ),
-            volume_mounts=[
-                client.V1VolumeMount(
-                    name=volume_name, mount_path=WORKSPACE, read_only=True
-                )
-            ],
+            runtime_class_name="nvidia",
         )
-
-        template = client.V1PodTemplateSpec(
-            metadata=client.V1ObjectMeta(labels={"app": name}),
-            spec=client.V1PodSpec(
-                containers=[container],
-                image_pull_secrets=(
-                    [
-                        client.V1LocalObjectReference(
-                            name=registry_credentials_secret_name
-                        )
-                    ]
-                    if registry_pat
-                    else []
-                ),
-                runtime_class_name="nvidia",
-                restart_policy="Never",
-                volumes=[
-                    client.V1Volume(
-                        name=volume_name,
-                        config_map=client.V1ConfigMapVolumeSource(
-                            name=name,
-                            items=[
-                                client.V1KeyToPath(key=k, path=v)
-                                for k, v in workload.mappings.items()
-                            ],
-                        ),
-                    )
-                ],
-            ),
-        )
-
-        return template
