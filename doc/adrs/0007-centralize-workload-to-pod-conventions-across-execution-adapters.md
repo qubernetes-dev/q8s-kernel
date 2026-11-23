@@ -16,48 +16,18 @@ Issue: [#74](https://github.com/qubernetes-dev/q8s-kernel/issues/74)
 
 Specification: [centralize-workload-to-pod-conventions-across-execution-adapters.md](../specs/centralize-workload-to-pod-conventions-across-execution-adapters.md)
 
-> ## Goal
-> 
-> Define the shared conventions for Python launch, workload file mounts, and image pulls in one place so they apply consistently across CPU, CUDA, HPC CPU, and HPC ROCm. Each adapter continues to supply the settings its computational environment requires, and the workload run continues to create the ConfigMap referenced by the Pod template.
-> 
-> ## Before — Shared rules repeated in adapters
-> 
-> ```mermaid
-> flowchart TB
->     W["Workload<br/>Files and entry point"]
->     W --> A["Four execution adapters"]
->     W --> R["Workload run<br/>Creates the ConfigMap"]
->     A --> D["Repeated rules<br/>Python launch, mounts, and pull settings"]
->     D --> P["Pod template"]
->     R -. "ConfigMap referenced by the Pod" .-> P
-> 
->     classDef repeated fill:#fff4ee,stroke:#b44738,color:#76281f
->     class D repeated
-> ```
-> 
-> ## After — Shared rules defined once
-> 
-> ```mermaid
-> flowchart TB
->     W["Workload<br/>Files and entry point"]
->     W --> A["Four execution adapters<br/>Supply target-specific settings"]
->     W --> R["Workload run<br/>Creates the ConfigMap"]
->     A --> S["Shared rules<br/>Python launch, mounts, and pull settings"]
->     S --> P["Pod template"]
->     R -. "ConfigMap referenced by the Pod" .-> P
-> 
->     classDef shared fill:#ecfdf5,stroke:#137459,color:#144d41
->     class S shared
-> ```
-> 
-> Specification: [centralize-workload-to-pod-conventions-across-execution-adapters.md](https://github.com/qubernetes-dev/q8s-kernel/blob/74-centralize-workload-to-pod-conventions-across-execution-adapters/doc/specs/centralize-workload-to-pod-conventions-across-execution-adapters.md)
+CPU, CUDA, HPC CPU, and HPC ROCm each assembled the same Python launch, workspace mount, and image pull settings. The workload run creates the ConfigMap separately. Every adapter must reference that ConfigMap and project its keys to the correct paths.
 
-TODO: Describe the problem, constraints, and alternatives considered. Use the linked issue as context.
+[ADR 0004](0004-entry-point-based-execution-targets.md) defines discovery through Python entry points. The current adapters share a maintainer, and the extension policy should also serve teams that package and maintain adapters independently of q8s core. [ADR 0006](0006-graceful-cleanup-of-kubernetes-workload-resources.md) defines workload resource ownership.
 
 ## Decision
 
-TODO: Describe the proposed architectural choice and why it addresses the problem.
+Make `JobPlugin.build_workload_pod_template` a supported, optional API for adapter authors. `JobPlugin` is the base class used by the existing adapters, so authors can discover the builder where they already find shared plugin behavior. The builder owns the common launch, workspace, and pull conventions. Each adapter continues to choose the image, prepare its environment, and define the resource and scheduling settings for its target.
+
+Third parties can publish their own adapter packages and register them through the existing `q8s.targets` entry point group without a q8s core release. Registration, `target_name`, base-image selection, and the documented plugin hooks form the adapter contract. Adapters may return a custom Pod template through `makejob` when their environment requires one. The workload run owns its Kubernetes resources, and adapters own resources they create through their lifecycle hooks.
 
 ## Consequences
 
-TODO: Describe benefits, tradeoffs, compatibility effects, and follow-up work.
+- q8s core documents the supported builder inputs and template behavior. Release notes announce deprecations and provide migration guidance before incompatible changes to the supported adapter contract.
+- An adapter that adopts the builder declares the minimum released q8s version that provides the interface it uses. Publish that core version before releasing an adapter that depends on it.
+- Once the builder is released, publish an adapter authoring guide on [qubernetes.dev](https://www.qubernetes.dev/) showing how to package, register, and verify a target for a new computational environment.

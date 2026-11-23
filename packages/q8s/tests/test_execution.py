@@ -366,6 +366,11 @@ class TestK8sContextExecuteWorkload(unittest.TestCase):
         self.assertRegex(volume.name, r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
         self.assertEqual(pod_spec.containers[0].volume_mounts[0].name, volume.name)
         self.assertEqual(volume.config_map.name, job.metadata.name)
+        config_map = self.core.create_namespaced_config_map.call_args.kwargs["body"]
+        assert config_map.metadata.name == volume.config_map.name
+        assert {
+            item.path: config_map.data[item.key] for item in volume.config_map.items
+        } == {"main.py": "print('hi')"}
 
     def test_run_uses_the_target_and_image_selected_at_start(self):
         def change_selection(**kwargs):
