@@ -1,6 +1,6 @@
 [project]
 name = "q8s-cuda"
-version = "0.1.0"
+version = "0.1.1"
 description = "CUDA-based GPU execution target plugin for q8s"
 authors = [{ name = "Vlad Stirbu", email = "vstirbu@gmail.com" }]
 readme = "README.md"
@@ -16,7 +16,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
 ]
-dependencies = ["q8s>=0.14.0"]
+dependencies = ["q8s>=0.14.3"]
 requires-python = ">=3.10"
 
 [project.urls]

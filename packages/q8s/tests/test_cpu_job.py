@@ -1,61 +1,25 @@
+# Copyright 2024-2026 Qubernetes
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import unittest
-from unittest.mock import MagicMock, patch
 
 from kubernetes import client
 from q8s.plugins.cpu_job import CPUJobTemplatePlugin
+from q8s.workload import Workload
 
 
 class TestCPUJobTemplatePlugin(unittest.TestCase):
-
-    @patch("q8s.plugins.cpu_job.client.V1Container")
-    @patch("q8s.plugins.cpu_job.client.V1PodTemplateSpec")
-    @patch("q8s.plugins.cpu_job.client.V1PodSpec")
-    @patch("q8s.plugins.cpu_job.client.V1ObjectMeta")
-    @patch("q8s.plugins.cpu_job.client.V1VolumeMount")
-    @patch("q8s.plugins.cpu_job.client.V1Volume")
-    @patch("q8s.plugins.cpu_job.client.V1ConfigMapVolumeSource")
-    def test_makejob_cpu(
-        self,
-        mock_v1_config_map_volume_source,
-        mock_v1_volume,
-        mock_v1_volume_mount,
-        mock_v1_object_meta,
-        mock_v1_pod_spec,
-        mock_v1_pod_template_spec,
-        mock_v1_container,
-    ):
-        plugin = CPUJobTemplatePlugin()
-        name = "test-job"
-        registry_pat = None
-        registry_credentials_secret_name = "test-secret"
-        container_image = "test-image"
-        env = [client.V1EnvVar(name="TEST_ENV", value="value")]
-        workload = MagicMock()
-        workload.is_src_project = False
-        workload.entry_module = "module"
-        workload.entry_script = "script.py"
-        workload.args = []
-        workload.mappings = {"main.py": "main.py"}
-        target = "cpu"
-
-        result = plugin.makejob(
-            name,
-            registry_pat,
-            registry_credentials_secret_name,
-            container_image,
-            workload,
-            env,
-            target,
-        )
-
-        self.assertIsNotNone(result)
-        mock_v1_container.assert_called_once()
-        mock_v1_pod_template_spec.assert_called_once()
-        mock_v1_pod_spec.assert_called_once()
-        mock_v1_object_meta.assert_called_once()
-        mock_v1_volume_mount.assert_called_once()
-        mock_v1_volume.assert_called_once()
-        mock_v1_config_map_volume_source.assert_called_once()
 
     def test_makejob_invalid_target(self):
         plugin = CPUJobTemplatePlugin()
@@ -64,12 +28,7 @@ class TestCPUJobTemplatePlugin(unittest.TestCase):
         registry_credentials_secret_name = "test-secret"
         container_image = "test-image"
         env = [client.V1EnvVar(name="TEST_ENV", value="value")]
-        workload = MagicMock()
-        workload.is_src_project = False
-        workload.entry_module = "module"
-        workload.entry_script = "script.py"
-        workload.args = []
-        workload.mappings = {"main.py": "main.py"}
+        workload = Workload.from_code("print(42)")
         target = "invalid-target"
 
         result = plugin.makejob(

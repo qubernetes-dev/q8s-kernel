@@ -2,7 +2,7 @@
 
 CPU execution target plugin for running q8s jobs on HPC nodes.
 
-This package provides the `hpc-cpu` execution target for q8s and depends on `q8s>=0.14.0`.
+This package provides the `hpc-cpu` execution target for q8s and depends on `q8s>=0.14.3`.
 
 ## Installation
 
