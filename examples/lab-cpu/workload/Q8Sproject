@@ -1,0 +1,12 @@
+name: lab-demo
+kubeconfig: ./kubeconfig
+python_env:
+  python_version: "3.12"
+  dependencies:
+    - qiskit==1.1.0
+targets:
+  lab-cpu:
+    python_env:
+      dependencies: []
+docker:
+  username: your-dockerhub-username
