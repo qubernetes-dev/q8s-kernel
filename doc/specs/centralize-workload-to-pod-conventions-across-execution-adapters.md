@@ -5,7 +5,7 @@ summary: "Centralize workload-to-Pod conventions across execution adapters"
 
 # Centralize workload-to-Pod conventions across execution adapters
 
-Status: Draft
+Status: Implemented
 
 Issue: [#74](https://github.com/qubernetes-dev/q8s-kernel/issues/74)
 

@@ -8,7 +8,7 @@ Date: 2026-11-23
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
